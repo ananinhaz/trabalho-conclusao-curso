@@ -28,40 +28,27 @@ Facilitar o processo de adoção de animais, conectando adotantes e doadores por
 - Edição e exclusão de cadastros
 - Indicação de animais recomendados com selo visual
 
-## 🧠 Inteligência Artificial
+## 🐾 Visão Geral
 
-O sistema conta com um microserviço em Python (Flask) que utiliza machine learning (com Scikit-learn e Pandas) para recomendar animais com base no perfil do usuário.
+**AdoptMe** é um sistema web para adoção de animais. Nesta entrega o foco é **backend + banco de dados** com uma **API REST em Flask** e **MySQL**. Há também um **frontend demo** (página estática) para demonstrar o consumo da API.
 
-## 🔧 Tecnologias Utilizadas
+> Próximas etapas previstas: autenticação via Google (OAuth 2.0) e motor de recomendação (KNN/Scikit-learn).
 
-### Frontend
-- React.js
+---
 
-### Backend
-- Node.js
-- Express
+## 🧱 Arquitetura
 
-### Microserviço de IA
-- Python
-- Flask
-- Scikit-learn
-- Pandas
+- **Backend (Flask, Python)**
+  - Padrão **MVC leve + camadas** (Controllers → Services → Repositories).
+  - **Pool de conexões** MySQL (`mysql.connector.pooling`).
+  - **Validação** com **Pydantic** (ex.: `EmailStr`).
+  - **CORS** habilitado para o frontend demo.
+  - Rotas de **health-check** e **CRUD** básico de `usuarios` e `animais`.
 
-### Outros
-- OAuth 2.0 (login com Google)
-- Figma (protótipos)
-- Microsoft Planner (gestão do projeto)
-- GitHub (controle de versão)
+- **Banco de Dados (MySQL 8.x)**
+  - Schema `adoptme` com tabelas `usuarios` e `animais`.
 
-## 🔒 Segurança
+- **Frontend (demo)**
+  - Página estática simples (`frontend/index.html`) que consome a API via `fetch`.
 
-- Autenticação via Google usando OAuth 2.0
-- Comunicação via HTTPS
-- Proteção contra injeção SQL com uso de boas práticas e prepared statements
 
-## 📂 Estrutura
-
-O sistema segue arquitetura de microserviços:
-- Frontend em React
-- Backend em Node.js (API REST)
-- Microserviço de recomendação em Python (Flask)

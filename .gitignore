@@ -1,0 +1,30 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Virtual envs
+.venv/
+venv/
+backend/venv/
+
+# Env & secrets
+.env
+.env.*
+
+# Flask / DB locais
+instance/
+*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+frontend/.cache/
+
+# SO
+.DS_Store
+Thumbs.db

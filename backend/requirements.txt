@@ -1,0 +1,5 @@
+flask==3.0.3
+mysql-connector-python==9.4.0
+python-dotenv==1.0.1
+pydantic==2.9.2
+flask-cors==4.0.1

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <title>AdoptMe</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, Arial, sans-serif; }
+    body { margin: 24px; background: #fafafa; color: #222; }
+    h1 { margin: 0 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 16px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+    input, button { padding: 8px 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+    button { cursor: pointer; border-color: #cbd5e1; }
+    .primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
+    .danger { background: #ef4444; color: #fff; border-color: #dc2626; }
+    .muted { color:#6b7280 }
+    ul { list-style: none; padding: 0; margin: 8px 0 0; }
+    li { display: flex; justify-content: space-between; gap: 8px; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; margin-top: 8px; background: #fff; }
+    small.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#f3f4f6; padding:2px 6px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>AdoptMe • Demo Frontend</h1>
+  <p class="muted">Consumindo sua API Flask em <small class="code" id="base"></small></p>
+
+  <div class="grid">
+    <section class="card">
+      <h3>Saúde do Backend</h3>
+      <div class="row">
+        <button class="primary" id="btnHealth">Checar /db-health</button>
+        <span id="healthStatus" class="muted">...</span>
+      </div>
+      <div class="row">
+        <button id="btnTables">Listar /tables</button>
+      </div>
+      <ul id="tablesList"></ul>
+    </section>
+
+    <section class="card">
+      <h3>Usuários</h3>
+      <div class="row">
+        <button id="btnLoadUsers">Carregar usuários</button>
+      </div>
+      <div class="row">
+        <input id="uNome" placeholder="Nome" />
+        <input id="uEmail" placeholder="Email" />
+        <button class="primary" id="btnAddUser">Adicionar</button>
+      </div>
+      <ul id="users"></ul>
+    </section>
+
+    <section class="card">
+      <h3>Animais</h3>
+      <div class="row">
+        <button id="btnLoadPets">Carregar animais</button>
+      </div>
+      <div class="row">
+        <input id="aNome" placeholder="Nome" />
+        <input id="aEspecie" placeholder="Espécie" />
+        <input id="aIdade" type="number" min="0" step="1" placeholder="Idade" style="width:100px" />
+        <button class="primary" id="btnAddPet">Adicionar</button>
+      </div>
+      <ul id="pets"></ul>
+    </section>
+  </div>
+
+  <script>
+    const BASE = 'http://127.0.0.1:5000';
+    document.getElementById('base').textContent = BASE;
+
+    async function j(url, opts={}) {
+      const res = await fetch(url, { headers: { 'Content-Type':'application/json' }, ...opts });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+
+    function renderList(containerId, items, type) {
+      const ul = document.getElementById(containerId);
+      ul.innerHTML = '';
+      items.forEach(it => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <div>
+            <strong>#${it.id}</strong> ${it.nome || '(sem nome)'}
+            ${type==='user' ? `<div class="muted">${it.email||''}</div>` : ''}
+            ${type==='pet'  ? `<div class="muted">${it.especie||''} • ${it.idade ?? ''} anos</div>` : ''}
+          </div>
+          <div>
+            <button class="danger" data-id="${it.id}" data-type="${type}">Excluir</button>
+          </div>
+        `;
+        ul.appendChild(li);
+      });
+
+      ul.querySelectorAll('button.danger').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const t  = btn.dataset.type;
+          if (!confirm(`Excluir ${t} #${id}?`)) return;
+          const path = t==='user' ? '/usuarios/' : '/animais/';
+          await fetch(BASE + path + id, { method: 'DELETE' });
+          (t==='user' ? loadUsers() : loadPets());
+        });
+      });
+    }
+
+    async function loadUsers(){ renderList('users', await j(BASE+'/usuarios'), 'user'); }
+    async function loadPets(){  renderList('pets',  await j(BASE+'/animais'),  'pet');  }
+
+    document.getElementById('btnHealth').onclick = async () => {
+      try {
+        const data = await j(BASE + '/db-health');
+        document.getElementById('healthStatus').textContent = data.ok ? 'OK ✅' : 'Falhou ❌';
+      } catch {
+        document.getElementById('healthStatus').textContent = 'Erro ❌';
+      }
+    };
+
+    document.getElementById('btnTables').onclick = async () => {
+      const data = await j(BASE + '/tables');
+      const ul = document.getElementById('tablesList');
+      ul.innerHTML = '';
+      (data.tabelas || []).forEach(t => {
+        const li = document.createElement('li');
+        li.textContent = t;
+        ul.appendChild(li);
+      });
+    };
+
+    document.getElementById('btnLoadUsers').onclick = loadUsers;
+    document.getElementById('btnLoadPets').onclick  = loadPets;
+
+    document.getElementById('btnAddUser').onclick = async () => {
+      const nome  = document.getElementById('uNome').value.trim();
+      const email = document.getElementById('uEmail').value.trim();
+      if(!nome || !email) return alert('Preencha nome e email.');
+      await j(BASE + '/usuarios', { method:'POST', body: JSON.stringify({ nome, email }) });
+      document.getElementById('uNome').value=''; document.getElementById('uEmail').value='';
+      loadUsers();
+    };
+
+    document.getElementById('btnAddPet').onclick = async () => {
+      const nome    = document.getElementById('aNome').value.trim();
+      const especie = document.getElementById('aEspecie').value.trim();
+      const idade   = parseInt(document.getElementById('aIdade').value || '0', 10);
+      if(!nome || !especie) return alert('Preencha nome e espécie.');
+      await j(BASE + '/animais', { method:'POST', body: JSON.stringify({ nome, especie, idade }) });
+      document.getElementById('aNome').value=''; document.getElementById('aEspecie').value=''; document.getElementById('aIdade').value='';
+      loadPets();
+    };
+  </script>
+</body>
+</html>
