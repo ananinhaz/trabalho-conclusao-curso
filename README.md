@@ -1,6 +1,6 @@
 # TCC - Adopt.me
 
-Este repositório será utilizado para armazenar o desenvolvimento do Trabalho de Conclusão de Curso (TCC).
+Este repositório armazena o desenvolvimento completo do Trabalho de Conclusão de Curso (TCC).
 
 ## Informações iniciais
 
@@ -12,43 +12,40 @@ Este repositório será utilizado para armazenar o desenvolvimento do Trabalho d
 
 # 🐾 Adopt.me
 
-Adopt.me é um sistema web inteligente de adoção de animais. O projeto utiliza inteligência artificial para recomendar animais com base no perfil do adotante, promovendo adoções mais conscientes e compatíveis.
+Adopt.me é um sistema web inteligente de adoção de animais. O projeto utiliza **Inteligência Artificial** (KNN Ponderado) para recomendar animais com base no perfil do adotante, promovendo adoções mais conscientes e compatíveis.
 
 ## 📌 Objetivo
 
-Facilitar o processo de adoção de animais, conectando adotantes e doadores por meio de uma plataforma personalizada e intuitiva.
+Facilitar o processo de adoção de animais, conectando adotantes e doadores por meio de uma plataforma personalizada e intuitiva, e **reduzindo a taxa de adoções mal-sucedidas** através da afinidade técnica.
 
-## 🚀 Funcionalidades
+## 🚀 Funcionalidades Chave
 
-- Cadastro e login de usuários (incluindo autenticação via Google)
-- Cadastro de animais para adoção
-- Filtros de busca por espécie, idade, porte e localização
-- Sistema de recomendação inteligente usando IA
-- Interface com cards informativos dos animais
-- Edição e exclusão de cadastros
-- Indicação de animais recomendados com selo visual
+- **Sistema de Recomendação por IA:** Implementação customizada do algoritmo **K-Nearest Neighbors Ponderado (KNN)**, que calcula a afinidade por **Distância Euclidiana**.
+- **Perfil do Adotante:** Formulário para coletar dados de estilo de vida (moradia, rotina, etc.) que alimentam o motor de IA.
+- **Autenticação Segura:** Cadastro e login de usuários com suporte a **Google OAuth 2.0**.
+- **Gerenciamento de Anúncios:** CRUD (Cadastro, Leitura, Atualização e Exclusão) completo para anúncios de animais por doadores.
+- **Interface:** Aplicação Single Page Application (SPA) com cards e selo visual de "Recomendado".
+- **Filtros de Busca:** Opções de filtragem por espécie, idade, porte e localização.
 
 ## 🐾 Visão Geral
 
-**AdoptMe** é um sistema web para adoção de animais. Nesta entrega o foco é **backend + banco de dados** com uma **API REST em Flask** e **MySQL**. Há também um **frontend demo** (página estática) para demonstrar o consumo da API.
-
-> Próximas etapas previstas: autenticação via Google (OAuth 2.0) e motor de recomendação (KNN/Scikit-learn).
+Adopt.me é um sistema web completo, com o frontend desenvolvido em **React/Material UI** e o backend em **API REST Flask** e **MySQL**. O foco principal desta entrega é a operação total da aplicação, validando o motor de recomendação como o principal diferencial técnico do TCC.
 
 ---
 
-## 🧱 Arquitetura
+## 🧱 Arquitetura Técnica
+
+O sistema segue uma arquitetura modularizada em três camadas, garantindo escalabilidade e separação de responsabilidades.
 
 - **Backend (Flask, Python)**
-  - Padrão **MVC leve + camadas** (Controllers → Services → Repositories).
-  - **Pool de conexões** MySQL (`mysql.connector.pooling`).
-  - **Validação** com **Pydantic** (ex.: `EmailStr`).
-  - **CORS** habilitado para o frontend demo.
-  - Rotas de **health-check** e **CRUD** básico de `usuarios` e `animais`.
+  - **Motor de IA:** Lógica de negócio do KNN Ponderado implementada diretamente em Python, gerenciando a vetorização de dados e o cálculo de similaridade.
+  - **API REST:** Estrutura organizada com **Blueprints** (`auth.py` e `api.py`) para gerenciar as rotas de autenticação, perfis e CRUD de animais.
+  - **Segurança:** Uso de **Pydantic** para validação de dados e `prepared statements` no acesso ao MySQL para mitigar Injeção SQL.
+  - **Conexão:** Utiliza **Pool de Conexões** MySQL (`mysql.connector.pooling`) para otimizar o desempenho.
 
 - **Banco de Dados (MySQL 8.x)**
-  - Schema `adoptme` com tabelas `usuarios` e `animais`.
+  - Schema `adoptme` com as tabelas cruciais `usuarios`, `animais` e `perfil_adotante`.
 
-- **Frontend (demo)**
-  - Página estática simples (`frontend/index.html`) que consome a API via `fetch`.
-
-
+- **Frontend (React / Material UI)**
+  - Aplicação Single Page Application (SPA) que consome a API REST.
+  - Principais componentes incluem a página de listagem (`Animals.jsx`), o formulário de doação (`Donate.jsx`) e o formulário de perfil do adotante (`AdopterForm.jsx`).
