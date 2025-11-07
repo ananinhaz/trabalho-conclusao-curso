@@ -5,7 +5,8 @@ bp = Blueprint("animais", __name__, url_prefix="/animais")
 
 @bp.get("")
 def list_animais():
-    return jsonify(svc.listar())
+    # repassa os filtros da querystring para o service
+    return jsonify(svc.listar(request.args))
 
 @bp.get("/<int:aid>")
 def get_animal(aid):
