@@ -1,15 +1,29 @@
-# app/api.py
 from __future__ import annotations
 
 from flask import Blueprint, request, jsonify, session
 from .extensions.db import db
-from math import sqrt
+
+# ✅ INCLUSÃO PARA SCIKIT-LEARN/KNN
+import numpy as np
+from sklearn.metrics.pairwise import pairwise_distances 
+# -------------------------------------------------------------------
 
 bp_api = Blueprint("api", __name__)
 
 # -------------------------------------------------------------------
-# Helpers gerais
+# CONFIGURAÇÃO DE PESOS DA IA (K-Nearest Neighbors Ponderado)
 # -------------------------------------------------------------------
+
+VEC_WEIGHTS = np.array([
+    1.0,  # [0] Porte/Moradia (V0)
+    1.0,  # [1] Crianças/Temperamento (V1)
+    5.0,  # [2] Tempo/Necessidade de Tempo (V2) - Ponderado alto!
+    1.0   # [3] Estilo de Vida/Atividade (V3)
+]) 
+
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------\
 def _require_auth() -> int | None:
     """Retorna user_id da sessão ou None."""
     uid = session.get("user_id")
@@ -39,133 +53,31 @@ def _json_error(msg: str, code: int = 400):
     return jsonify({"ok": False, "error": msg}), code
 
 
-# -------------------------------------------------------------------
-# Helpers específicos de recomendação (conteúdo + KNN simples com PONDERACÃO)
-# -------------------------------------------------------------------
-
-# PESOS: Os pesos são aplicados na ordem dos vetores (10 posições).
-# Pesos mais altos são dados a atributos críticos (Moradia e Tempo).
-# Vetor de features: [apto, quintal, chacara, tem_criancas, tempo_norm, estilo_calmo, estilo_mod, estilo_ativo, estilo_esport, estilo_pouco_casa]
-WEIGHTS = [
-    3.0, 3.0, 1.0, 2.0, 2.5,
-    1.5, 1.5, 1.5, 1.0, 2.0
-]
-
-
-def _build_user_vector(perfil: dict | None) -> list[float]:
-    """
-    Converte o perfil do adotante em um vetor numérico (10 elementos).
-    Aqui fazemos one-hot simples + alguns números diretos.
-    """
-    if not perfil:
-        return []
-
-    tipo_moradia = (perfil.get("tipo_moradia") or "").lower()
-    tem_criancas = int(perfil.get("tem_criancas") or 0)
-    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
-    estilo = (perfil.get("estilo_vida") or "").lower()
-
-    # one-hot de moradia (3)
-    moradia_apto = 1.0 if "aparta" in tipo_moradia else 0.0
-    moradia_quintal = 1.0 if "quintal" in tipo_moradia else 0.0
-    moradia_chacara = 1.0 if "chácara" in tipo_moradia or "sitio" in tipo_moradia else 0.0
-
-    # one-hot de estilo (5)
-    estilo_calmo = 1.0 if "calmo" in estilo else 0.0
-    estilo_moderado = 1.0 if "moder" in estilo else 0.0
-    estilo_ativo = 1.0 if "ativo" in estilo else 0.0
-    estilo_esportivo = 1.0 if "esport" in estilo else 0.0
-    estilo_pouco_casa = 1.0 if "pouco" in estilo or "fico pouco" in estilo else 0.0
-
-    # normalização simples do tempo (1)
-    tempo_norm = min(tempo, 40) / 40.0  # 0 a 1
-
-    # Vetor final tem 10 elementos (deve corresponder a WEIGHTS)
-    return [
-        moradia_apto,
-        moradia_quintal,
-        moradia_chacara,
-        float(tem_criancas),
-        tempo_norm,
-        estilo_calmo,
-        estilo_moderado,
-        estilo_ativo,
-        estilo_esportivo,
-        estilo_pouco_casa,
-    ]
-
-
-def _build_animal_vector(row: dict) -> list[float]:
-    """
-    Converte o animal em vetor numérico (10 elementos) para que a distância
-    possa ser calculada contra o vetor do usuário.
-    """
-    especie = (row.get("especie") or "").lower()
-    porte = (row.get("porte") or "").lower()
-
-    # aproximações
-    is_gato = 1.0 if "gato" in especie else 0.0
-    is_cachorro = 1.0 if "cach" in especie else 0.0
-
-    porte_pequeno = 1.0 if "pequeno" in porte else 0.0
-    porte_medio = 1.0 if "medio" in porte or "médio" in porte else 0.0
-    porte_grande = 1.0 if "grande" in porte else 0.0
-
-    # mapeamento para o mesmo espaço do usuário: (10 elementos)
-    # [apto, quintal, chacara, tem_criancas, tempo_norm, estilo_calmo,
-    #  estilo_mod, estilo_ativo, estilo_esport, estilo_pouco]
-    return [
-        # se é gato, favorece apto; se é cachorro médio/grande, favorece quintal
-        is_gato,
-        1.0 if is_cachorro and (porte_medio or porte_grande) else 0.0,
-        0.0,  # chácara não modelamos a partir do animal
-        0.0,  # animal não "tem crianças"
-        1.0 if is_gato else 0.5,  # gatos tendem a exigir menos tempo
-        1.0 if is_gato else 0.0,  # estilo calmo
-        0.5 if is_cachorro and porte_pequeno else 0.2,  # moderado
-        1.0 if is_cachorro and (porte_medio or porte_grande) else 0.3,  # ativo
-        0.6 if is_cachorro else 0.1,  # esportivo
-        0.0,  # pouco em casa não dá pra inferir do pet
-    ]
-
-def _euclidean(a: list[float], b: list[float]) -> float:
-    """
-    Calcula a Distância Euclidiana Ponderada.
-    Isso aumenta a penalidade para incompatibilidades em atributos críticos.
-    """
-    # Garante que os vetores e pesos tenham o mesmo tamanho
-    if len(a) != len(b) or len(a) != len(WEIGHTS):
-        # Fallback para o cálculo não ponderado se houver erro de tamanho
-        return sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
-        
-    # Cálculo da Distância Euclidiana Ponderada: Raiz quadrada da soma de: Peso * (diferença)²
-    weighted_sq_diff = [(w * (x - y) ** 2) for x, y, w in zip(a, b, WEIGHTS)]
-    
-    return sqrt(sum(weighted_sq_diff))
+def _rows_to_payload(rows, ids):
+    return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
 
 
 # -------------------------------------------------------------------
-# Perfil do Adotante
+# Perfil do Adotante (Rotas omitidas por brevidade)
 # -------------------------------------------------------------------
 @bp_api.get("/perfil_adotante")
 def get_perfil_adotante():
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-
+    
     with db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
                 SELECT usuario_id, tipo_moradia, tem_criancas,
-                       tempo_disponivel_horas_semana, estilo_vida, atualizado_em
-                FROM perfil_adotante
-                WHERE usuario_id = %s
+                        tempo_disponivel_horas_semana, estilo_vida, atualizado_em
+                    FROM perfil_adotante
+                    WHERE usuario_id = %s
                 """,
                 (uid,),
             )
             row = cur.fetchone()
-
     return jsonify({"ok": True, "perfil": row})
 
 
@@ -203,15 +115,15 @@ def upsert_perfil_adotante():
                 """,
                 (uid, tipo_moradia, tem_criancas, tempo, estilo_vida),
             )
-
     return jsonify({"ok": True})
 
 
 # -------------------------------------------------------------------
-# Animais – listagem + filtros
+# Animais (Rotas omitidas por brevidade)
 # -------------------------------------------------------------------
 @bp_api.get("/animais")
 def list_animais():
+    # ... (código para listar animais)
     especie = request.args.get("especie") or ""
     idade = (request.args.get("idade") or "").lower()
     porte = (request.args.get("porte") or "").lower()
@@ -225,7 +137,7 @@ def list_animais():
     if idade in ("filhote", "adulto", "idoso"):
         where.append("LOWER(a.idade) LIKE %s")
         params.append(f"%{idade}%")
-    if porte in ("pequeno", "medio", "médio", "grande"):
+    if porte in ("pequeno", "medio", "grande"):
         where.append("LOWER(a.porte) LIKE %s")
         params.append(f"%{porte}%")
     if cidade_qs:
@@ -236,7 +148,7 @@ def list_animais():
         SELECT a.id, a.nome, a.especie, a.raca, a.idade, a.porte,
                a.descricao, a.cidade, a.photo_url, a.donor_name, a.donor_whatsapp,
                a.doador_id, a.criado_em AS created_at
-        FROM animais a
+          FROM animais a
     """
     if where:
         sql += " WHERE " + " AND ".join(where)
@@ -250,11 +162,9 @@ def list_animais():
     return jsonify([_row_to_animal(r) for r in rows])
 
 
-# -------------------------------------------------------------------
-# Animais – criação
-# -------------------------------------------------------------------
 @bp_api.post("/animais")
 def create_animal():
+    # ... (código para criar animal)
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
@@ -263,7 +173,7 @@ def create_animal():
     nome = (data.get("nome") or "").strip()
     especie = (data.get("especie") or "").strip()
     raca = (data.get("raca") or None)
-    idade = (data.get("idade") or "").strip()
+    idade = (data.get("idade") or "").strip() # IDADE RECEBIDA
     porte = (data.get("porte") or None)
     descricao = (data.get("descricao") or "").strip()
     cidade = (data.get("cidade") or "").strip()
@@ -284,37 +194,26 @@ def create_animal():
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """,
                 (
-                    uid,
-                    nome,
-                    especie,
-                    raca,
-                    idade,
-                    porte,
-                    descricao,
-                    cidade,
-                    photo_url,
-                    donor_name,
-                    donor_whatsapp,
+                    uid, nome, especie, raca, idade, porte, descricao, 
+                    cidade, photo_url, donor_name, donor_whatsapp,
                 ),
             )
             animal_id = cur.lastrowid
     return jsonify({"ok": True, "id": animal_id})
 
 
-# -------------------------------------------------------------------
-# Animais – detalhe / update / delete / meus
-# -------------------------------------------------------------------
 @bp_api.get("/animais/<int:aid>")
 def get_animal(aid: int):
+    # ... (código para detalhe do animal)
     with db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
                 SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       doador_id, criado_em AS created_at
-                FROM animais
-                WHERE id=%s
+                        cidade, photo_url, donor_name, donor_whatsapp,
+                        doador_id, criado_em AS created_at
+                    FROM animais
+                    WHERE id=%s
                 """,
                 (aid,),
             )
@@ -326,6 +225,7 @@ def get_animal(aid: int):
 
 @bp_api.put("/animais/<int:aid>")
 def update_animal(aid: int):
+    # ... (código para update animal)
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
@@ -360,15 +260,8 @@ def update_animal(aid: int):
                     WHERE id=%s
                 """,
                 (
-                    nome,
-                    especie,
-                    raca,
-                    idade,
-                    porte,
-                    descricao,
-                    cidade,
-                    photo_url,
-                    aid,
+                    nome, especie, raca, idade, porte,
+                    descricao, cidade, photo_url, aid,
                 ),
             )
     return jsonify({"ok": True})
@@ -376,6 +269,7 @@ def update_animal(aid: int):
 
 @bp_api.delete("/animais/<int:aid>")
 def delete_animal(aid: int):
+    # ... (código para deletar animal)
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
@@ -394,6 +288,7 @@ def delete_animal(aid: int):
 
 @bp_api.get("/animais/mine")
 def animais_mine():
+    # ... (código para meus animais)
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
@@ -403,11 +298,11 @@ def animais_mine():
             cur.execute(
                 """
                 SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       doador_id, criado_em AS created_at
-                FROM animais
-                WHERE doador_id = %s
-                ORDER BY criado_em DESC
+                        cidade, photo_url, donor_name, donor_whatsapp,
+                        doador_id, criado_em AS created_at
+                    FROM animais
+                    WHERE doador_id = %s
+                    ORDER BY criado_em DESC
                 """,
                 (uid,),
             )
@@ -416,30 +311,109 @@ def animais_mine():
 
 
 # -------------------------------------------------------------------
-# Recomendações (conteúdo + KNN simples + fallback)
+# 🧠 Vetores para recomendação (KNN)
+# -------------------------------------------------------------------
+def _build_user_vector(perfil: dict) -> list[float]:
+    """Cria um vetor numérico de 4 dimensões a partir do perfil do adotante."""
+    tm = (perfil.get("tipo_moradia") or "").lower()
+    tem_criancas = int(perfil.get("tem_criancas") or 0)
+    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
+    estilo = (perfil.get("estilo_vida") or "").lower()
+
+    # [0] Tipo Moradia 
+    if "aparta" in tm:
+        tm_vec = 0.0
+    elif "quintal" in tm or "casa" in tm:
+        tm_vec = 1.0
+    else:
+        tm_vec = 0.5
+
+    # [1] Tem Crianças 
+    
+    # [2] Tempo Disponível 
+    tempo_norm = min(tempo, 20) / 20.0 
+
+    # [3] Estilo de Vida
+    if "ativo" in estilo or "esport" in estilo:
+        estilo_vec = 1.0
+    elif "tranq" in estilo or "calmo" in estilo:
+        estilo_vec = 0.0
+    else:
+        estilo_vec = 0.5
+
+    return [tm_vec, float(tem_criancas), tempo_norm, estilo_vec]
+
+
+def _build_animal_vector(a: dict) -> list[float]:
+    """Cria um vetor numérico de 4 dimensões a partir dos atributos do animal."""
+    
+    especie = str(a.get("especie") or "").lower()
+    porte = str(a.get("porte") or "").lower()
+    
+    # 🚨 LÓGICA DE TRADUÇÃO DE IDADE NUMÉRICA PARA CATEGÓRICA 🚨
+    age_value = str(a.get("idade") or "0")
+    
+    determined_idade = "desconhecido"
+    try:
+        # Tenta extrair um número (seja ele int ou float, como "1" ou "1.5")
+        age_num = float(age_value.split()[0].replace(',', '.')) 
+        
+        if age_num <= 1:
+            determined_idade = "filhote"
+        elif age_num <= 7:
+            determined_idade = "adulto"
+        else:
+            determined_idade = "idoso"
+            
+    except (ValueError, IndexError):
+        # Se a idade não for numérica (por ex., "filhote" ou "adulto"), usa o valor original
+        determined_idade = age_value.lower() 
+
+    idade = determined_idade # Usamos a categoria determinada para a lógica da IA
+
+    # [0] Porte/Espaço Necessário
+    if especie == "gato" or porte == "pequeno":
+        v0 = 0.0
+    elif porte == "medio":
+        v0 = 0.5
+    else: 
+        v0 = 1.0
+
+    # [1] Temperamento (baseado na nova categoria de idade)
+    if idade == "idoso":
+        v1 = 0.0
+    elif idade == "adulto":
+        v1 = 0.5
+    else: # filhote ou não especificado
+        v1 = 1.0 
+
+    # [2] Necessidade de Tempo (baseado na nova categoria de idade)
+    if especie == "gato":
+        v2 = 0.0
+    elif idade == "filhote" or especie == "cachorro":
+        v2 = 1.0
+    else: 
+        v2 = 0.5
+
+    # [3] Nível de Atividade (baseado na nova categoria de idade)
+    if especie == "cachorro" or idade == "filhote":
+        v3 = 1.0
+    else: 
+        v3 = 0.0
+        
+    return [v0, v1, v2, v3]
+
+
+# -------------------------------------------------------------------
+# Recomendações (USANDO SCIKIT-LEARN/NUMPY)
 # -------------------------------------------------------------------
 @bp_api.get("/recomendacoes")
 def recomendacoes():
-    """
-    Com login: recomenda com base no perfil (content-based + KNN simples Ponderado).
-    Sem login ou sem vetor: devolve últimos anúncios.
-    Retorno: {"items":[...], "ids":[...]}
-    """
-    n = int(request.args.get("n") or 5)
-    
-    # 1. Tenta obter o ID do usuário da sessão (autenticação real)
+    # ... (código de recomendação permanece o mesmo)
+    n = int(request.args.get("n") or 6)
     uid = _require_auth()
-    
-    # 2. Se não estiver logado, verifica 'usuario_id' na query string (para TESTE)
-    if not uid:
-        test_uid_str = request.args.get("usuario_id")
-        if test_uid_str and test_uid_str.isdigit():
-            uid = int(test_uid_str) # Usa o ID para rodar a lógica de recomendação.
 
-    def _rows_to_payload(rows, ids):
-        return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
-
-    # Se ainda não houver UID (nem na sessão, nem na QS) => Fallback 1 (Últimos anúncios)
+    # 1) Lógica de fallback para usuário não logado ou sem perfil (início)
     if not uid:
         with db() as conn:
             with conn.cursor(dictionary=True) as cur:
@@ -448,32 +422,31 @@ def recomendacoes():
                     SELECT id, nome, especie, raca, idade, porte, descricao,
                            cidade, photo_url, donor_name, donor_whatsapp,
                            criado_em AS created_at
-                    FROM animais
-                    ORDER BY criado_em DESC
-                    LIMIT %s
+                      FROM animais
+                     ORDER BY criado_em DESC
+                     LIMIT %s
                     """,
                     (n,),
                 )
                 rows = cur.fetchall() or []
         return jsonify(_rows_to_payload(rows, []))
 
-    # Busca perfil do usuário (KNN START)
+    # 2) Busca perfil
     with db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
                 SELECT tipo_moradia, tem_criancas,
-                       tempo_disponivel_horas_semana, estilo_vida
-                FROM perfil_adotante
-                WHERE usuario_id = %s
+                        tempo_disponivel_horas_semana, estilo_vida
+                    FROM perfil_adotante
+                    WHERE usuario_id = %s
                 """,
                 (uid,),
             )
             perfil = cur.fetchone()
 
-    user_vec = _build_user_vector(perfil)
-    if not user_vec:
-        # sem perfil => últimos (Fallback 2, igual ao Fallback 1)
+    if not perfil:
+        # Lógica de fallback para sem perfil
         with db() as conn:
             with conn.cursor(dictionary=True) as cur:
                 cur.execute(
@@ -481,47 +454,94 @@ def recomendacoes():
                     SELECT id, nome, especie, raca, idade, porte, descricao,
                            cidade, photo_url, donor_name, donor_whatsapp,
                            criado_em AS created_at
-                    FROM animais
-                    ORDER BY criado_em DESC
-                    LIMIT %s
+                      FROM animais
+                     ORDER BY criado_em DESC
+                     LIMIT %s
                     """,
                     (n,),
                 )
                 rows = cur.fetchall() or []
         return jsonify(_rows_to_payload(rows, []))
 
-    # carrega todos os animais para calcular distância
+    # 3) Temos perfil → pega todos os animais
     with db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
                 SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       criado_em AS created_at
-                FROM animais
-                ORDER BY criado_em DESC
-                LIMIT 200
+                        cidade, photo_url, donor_name, donor_whatsapp,
+                        criado_em AS created_at
+                    FROM animais
                 """
             )
-            animais = cur.fetchall() or []
+            animals = cur.fetchall() or []
 
-    # calcula distância user-animal e ordena (KNN Ponderado)
+    # --- regras duras (filtros) ---
+    tm = (perfil.get("tipo_moradia") or "").lower()
+    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
+
+    def _hard_ok(a):
+        especie = str(a.get("especie") or "").lower()
+        porte = str(a.get("porte") or "").lower()
+
+        if "aparta" in tm and tempo <= 6:
+            if "gato" in especie:
+                return True
+            if "cachorro" in especie and porte in ("pequeno", "pequena", "mini"):
+                return True
+            return False
+
+        if tempo <= 4 and "cachorro" in especie and porte in ("medio", "grande"):
+            return False
+
+        return True
+
+    filtered = [a for a in animals if _hard_ok(a)]
+    if not filtered:
+        filtered = animals
+
+    # --- 4) vetores e ranking (KNN Ponderado com Scikit-learn) ---
+    user_vec = _build_user_vector(perfil)
+    
+    # 4.1 Constrói as matrizes para o Scikit-learn
+    user_vec_np = np.array([user_vec])
+    animal_vectors = []
+    animal_map = []
+    
+    for r in filtered:
+        animal_vec = _build_animal_vector(r) 
+        if len(animal_vec) == len(VEC_WEIGHTS):
+            animal_vectors.append(animal_vec)
+            animal_map.append(r)
+        
+    X_animals = np.array(animal_vectors)
+    
+    if X_animals.size == 0:
+         return jsonify(_rows_to_payload([], []))
+
+    # 4.2 CÁLCULO DA DISTÂNCIA EUCLIDIANA PONDERADA COM SCIKIT-LEARN
+    distances = pairwise_distances(
+        user_vec_np, 
+        X_animals, 
+        metric='minkowski',
+        p=2, 
+        w=VEC_WEIGHTS
+    )[0] 
+
+    # 4.3 Combina distâncias e dados e ordena (KNN)
     scored: list[tuple[float, dict]] = []
-    for r in animais:
-        animal_vec = _build_animal_vector(r)
-        # a menor distância (dist) = maior similaridade (melhor recomendação)
-        dist = _euclidean(user_vec, animal_vec)
-        scored.append((dist, r))
+    for dist, animal_data in zip(distances, animal_map):
+        scored.append((float(dist), animal_data))
 
     scored.sort(key=lambda x: x[0])
-    top_rows = [r for _, r in scored[:n]]
-    ids = [r["id"] for r in top_rows]
-
-    return jsonify(_rows_to_payload(top_rows, ids))
+    
+    top = [a for _, a in scored[:n]]
+    ids = [a["id"] for a in top]
+    return jsonify(_rows_to_payload(top, ids))
 
 
 # -------------------------------------------------------------------
-# Registrar no app
+# Registrar no app 
 # -------------------------------------------------------------------
 def register_blueprints(app):
     app.register_blueprint(bp_api)
