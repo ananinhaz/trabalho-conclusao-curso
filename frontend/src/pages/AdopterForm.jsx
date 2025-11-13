@@ -1,4 +1,3 @@
-// src/pages/AdopterForm.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { perfilApi } from "../api";
@@ -18,7 +17,6 @@ import HomeIcon from "@mui/icons-material/Home";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
-// Nenhum import novo necessário
 
 export default function AdopterForm() {
   const navigate = useNavigate();
@@ -30,7 +28,6 @@ export default function AdopterForm() {
   });
   const [msg, setMsg] = useState("");
 
-  // ... (lógica useEffect e handleSubmit idêntica) ...
 
   useEffect(() => {
     (async () => {
@@ -72,7 +69,6 @@ export default function AdopterForm() {
         bgcolor: "#F9FAFB",
       }}
     >
-      {/* ... (Header idêntico) ... */}
       <Box
         sx={{
           height: 62,
@@ -95,7 +91,7 @@ export default function AdopterForm() {
 
       <Box
         sx={{
-          maxWidth: 820, // Mantém a largura máxima do card
+          maxWidth: 820, 
           mx: "auto",
           mt: 4,
           px: { xs: 2, md: 0 },
@@ -109,15 +105,14 @@ export default function AdopterForm() {
             bgcolor: "#fff",
             border: "1px solid rgba(15,23,42,0.03)",
             boxShadow: "0 20px 50px rgba(15,23,42,0.03)",
-            p: { xs: 2.5, md: 3 }, // Padding interno do Paper reduzido
+            p: { xs: 2.5, md: 3 }, 
           }}
         >
-          {/* --- CABEÇALHO COMPACTO --- */}
           <Box sx={{ textAlign: "center", mb: 2 }}>
             <Box
               sx={{
-                width: 44, // Ícone menor
-                height: 44, // Ícone menor
+                width: 44, 
+                height: 44, 
                 bgcolor: "#EEF2FF",
                 borderRadius: "50%",
                 display: "flex",
@@ -131,8 +126,8 @@ export default function AdopterForm() {
             </Box>
             
             <Typography
-              variant="h6" // Mantido como h6, mas fonte pode ser ajustada
-              sx={{ fontWeight: 600, color: "#1f2937", mb: 0.5, fontSize: "1.1rem" }} // Fonte menor
+              variant="h6" 
+              sx={{ fontWeight: 600, color: "#1f2937", mb: 0.5, fontSize: "1.1rem" }} 
             >
               Para indicarmos o melhor pet, precisamos te conhecer 🙂
             </Typography>
@@ -144,11 +139,10 @@ export default function AdopterForm() {
 
           <Divider sx={{ my: 2 }} />
 
-          {/* --- FORMULÁRIO COMPACTO --- */}
           <form onSubmit={handleSubmit}>
-            <Stack spacing={1.5}> {/* Espaçamento entre campos reduzido */}
+            <Stack spacing={1.5}> 
               <TextField
-                size="small" // <-- A MÁGICA ACONTECE AQUI
+                size="small" 
                 select
                 label="Tipo de moradia"
                 value={form.tipo_moradia}
@@ -175,7 +169,7 @@ export default function AdopterForm() {
               </TextField>
 
               <TextField
-                size="small" // <-- A MÁGICA ACONTECE AQUI
+                size="small" 
                 select
                 label="Tem crianças em casa?"
                 value={form.tem_criancas}
@@ -202,7 +196,7 @@ export default function AdopterForm() {
               </TextField>
 
               <TextField
-                size="small" // <-- A MÁGICA ACONTECE AQUI
+                size="small" 
                 label="Tempo disponível (horas/semana)"
                 type="number"
                 value={form.tempo_disponivel_horas_semana}
@@ -225,14 +219,13 @@ export default function AdopterForm() {
                   disableUnderline: true,
                   sx: { borderRadius: "0.9rem", bgcolor: "#f3f4f6" },
                 }}
-                // Estilizando o HelperText para ser menor
                 FormHelperTextProps={{
                   sx: { mt: 0.25, fontSize: "0.7rem", lineHeight: 1.2 }
                 }}
               />
 
               <TextField
-                size="small" // <-- A MÁGICA ACONTECE AQUI
+                size="small" 
                 select
                 label="Estilo de vida"
                 value={form.estilo_vida}
@@ -264,20 +257,18 @@ export default function AdopterForm() {
                   Fico pouco em casa
                 </MenuItem>
               </TextField>
-
-              {/* --- BOTÃO COMPACTO --- */}
               <Button
                 type="submit"
-                size="large" // Mantém large para ser fácil de clicar, mas ajusta padding
+                size="large"
                 variant="contained"
                 startIcon={<FavoriteBorderIcon />}
                 sx={{
                   mt: 2,
-                  py: 0.8, // Padding vertical reduzido
+                  py: 0.8, 
                   borderRadius: "9999px",
                   textTransform: "none",
                   fontWeight: 600,
-                  fontSize: "0.9rem", // Fonte do botão menor
+                  fontSize: "0.9rem",
                   bgcolor: primaryColor,
                   color: "#fff",
                   boxShadow: "none",

@@ -1,4 +1,3 @@
-# app/__init__.py
 import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -7,19 +6,13 @@ from dotenv import load_dotenv
 def create_app():
     load_dotenv()
     app = Flask(__name__)
-
-    # estamos usando 127.0.0.1 no front E no back
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=False,
         SESSION_PERMANENT=False,
-        # IMPORTANTE: o domínio tem que bater com o host que o front usa
         SESSION_COOKIE_DOMAIN="127.0.0.1",
-        # se quiser deixar totalmente livre, poderia ser: SESSION_COOKIE_DOMAIN=None
     )
-
-    # CORS – deixa localhost e 127
     CORS(
         app,
         supports_credentials=True,

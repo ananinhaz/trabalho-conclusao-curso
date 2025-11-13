@@ -1,4 +1,3 @@
-// src/pages/Login.jsx
 import { useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "../api";
 import {
@@ -10,14 +9,14 @@ import {
   Button,
   Stack,
   Divider,
-} from "@mui/material"; // Importar componentes MUI
+} from "@mui/material"; 
 
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
 
   // Cores e Estilos Comuns
-  const primaryColor = "#6366F1"; // Azul/Roxo do AdoptMe
+  const primaryColor = "#6366F1"; 
   const primaryColorHover = "#4F46E5";
   const cardStyles = {
     borderRadius: "1.25rem",

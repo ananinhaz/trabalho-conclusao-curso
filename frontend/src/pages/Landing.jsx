@@ -1,85 +1,114 @@
 // src/pages/Landing.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// Importa o módulo de API que contém animaisApi.list
+import { animaisApi } from '../api'; 
 import {
-  Box,
-  Container,
-  Paper,
-  Typography,
-  Button,
-  Grid,
-  Stack,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
+  Box,
+  Container,
+  Paper,
+  Typography,
+  Button,
+  Grid,
+  Stack,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  IconButton,
+  CircularProgress,
 } from "@mui/material";
 import PetsIcon from "@mui/icons-material/Pets";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 
-// MOCK DE DADOS ORIGINAIS DOS ANIMAIS (MANTIDO)
-const animaisMock = [
-  {
-    id: 1,
-    nome: "Luna",
-    especie: "Gato",
-    descricao: "Filhote dócil, se dá bem com crianças.",
-    foto: "https://placekitten.com/500/260",
-  },
-  {
-    id: 2,
-    nome: "Thor",
-    especie: "Cachorro",
-    descricao: "Porte médio, muito carinhoso.",
-    foto: "https://images.dog.ceo/breeds/hound-blood/n02088466_9625.jpg",
-  },
-  {
-    id: 3,
-    nome: "Maya",
-    especie: "Cachorro",
-    descricao: "Ideal para apartamento.",
-    foto: "https://images.dog.ceo/breeds/spaniel-cocker/n02102318_8705.jpg",
-  },
-  {
-    id: 4,
-    nome: "Simba",
-    especie: "Gato",
-    descricao: "Calmo, castrado.",
-    foto: "https://placekitten.com/501/260",
-  },
-];
-
 
 export default function Landing() {
-  const navigate = useNavigate();
+  const navigate = useNavigate();
 
-  const [idx, setIdx] = useState(0);
-  
-  // LÓGICA DO CARROSSEL AUTOMÁTICO (MANTIDA)
+  // 1. ESTADOS PARA DADOS REAIS E CARREGAMENTO
+  const [animais, setAnimais] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [idx, setIdx] = useState(0);
+
+  // 2. LÓGICA DE BUSCA DE DADOS REAIS DO BACKEND (API)
+  useEffect(() => {
+    async function fetchAnimais() {
+      try {
+        // Chama o endpoint /api/animais
+        const response = await animaisApi.list(); 
+        
+        let fetchedAnimais = [];
+
+        // 💡 MUDANÇA: Verifica se a resposta é um array direto OU se o array está na chave 'animais'
+        if (Array.isArray(response)) {
+            // Caso 1: API retorna o array diretamente: [{}, {}, ...]
+            fetchedAnimais = response.slice(0, 10);
+        } else if (Array.isArray(response.animais)) {
+            // Caso 2: API retorna o array dentro da chave 'animais': { animais: [...] }
+            fetchedAnimais = response.animais.slice(0, 10);
+        } else {
+            console.warn("A resposta da API não está no formato de array ou { animais: array }.", response);
+        }
+
+        
+        // Se não houver animais reais, usa um fallback estático.
+        if (fetchedAnimais.length === 0) {
+            console.warn("API retornou 0 animais, usando fallback estático no carrossel.");
+            setAnimais([{
+                id: 'fallback',
+                nome: "Mascote",
+                especie: "Cachorro",
+                descricao: "Adote um amigo, mude uma vida. Clique em 'Quero adotar'.",
+                // Garante que há uma imagem de fallback para evitar erros
+                photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg", 
+            }]);
+        } else {
+            // Agora, se houver dados, eles serão carregados
+            setAnimais(fetchedAnimais);
+        }
+
+      } catch (error) {
+        console.error("Erro ao carregar animais para o carrossel. Verifique se o backend está rodando e se a rota /api/animais está acessível.", error);
+        // Fallback em caso de erro de conexão
+        setAnimais([{
+            id: 'fallback-error',
+            nome: "Mascote",
+            especie: "Cachorro",
+            descricao: "O AdoptMe está carregando... Adote um amigo!",
+            photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg",
+        }]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchAnimais();
+  }, []); 
+
+ //CARROSSEL AUTOMÁTICO
   useEffect(() => {
-    const t = setInterval(() => {
-      setIdx((prev) => (prev + 1) % animaisMock.length);
-    }, 4500); 
-    return () => clearInterval(t);
-  }, [animaisMock.length]);
+    if (animais.length > 0) {
+      const t = setInterval(() => {
+        setIdx((prev) => (prev + 1) % animais.length);
+      }, 4500); 
+      return () => clearInterval(t);
+    }
+  }, [animais.length]);
 
-  // Função para avançar/voltar no carrossel manualmente
+  //Função para avançar/voltar no carrossel manualmente
   const handlePrevPet = () => {
-    setIdx((prev) => (prev - 1 + animaisMock.length) % animaisMock.length);
+    setIdx((prev) => (prev - 1 + animais.length) % animais.length);
   };
 
   const handleNextPet = () => {
-    setIdx((prev) => (prev + 1) % animaisMock.length);
+    setIdx((prev) => (prev + 1) % animais.length);
   };
 
-  // Cores da nossa identidade visual (MANTIDAS)
   const primaryColor = "#6366F1";
   const primaryColorHover = "#4F46E5";
 
-  // Estilo de card padrão (MANTIDO)
+  // Estilo de card padrão
   const cardStyles = {
     borderRadius: "1.25rem",
     bgcolor: "#fff",
@@ -90,7 +119,7 @@ export default function Landing() {
   return (
     <Box sx={{ bgcolor: "#F9FAFB", minHeight: "100vh" }}>
       
-      {/* 1. TOPO / HEADER (MANTIDO) */}
+      {}
       <Paper
         elevation={0}
         component="header"
@@ -157,7 +186,7 @@ export default function Landing() {
         </Stack>
       </Paper>
 
-      {/* 2. CARROSSEL HORIZONTAL COM CONTEÚDO DO PET E NOVA FRASE */}
+      {/* CARROSSEL HORIZONTAL COM CONTEÚDO DO PET */}
       <Container maxWidth="lg" sx={{ mt: { xs: 4, md: 6 }, mb: { xs: 4, md: 6 } }}>
         <Paper
           elevation={0}
@@ -170,172 +199,190 @@ export default function Landing() {
             bgcolor: '#FFF', 
           }}
         >
-          {/* Loop pelos animais para animação de fade */}
-          {animaisMock.map((pet, i) => (
-            <Box
-              key={pet.id}
-              sx={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                display: "flex", 
-                alignItems: "stretch", 
-                opacity: i === idx ? 1 : 0, 
-                transition: "opacity 0.8s ease-in-out",
-                bgcolor: '#fff', 
-              }}
-            >
-              {/* Parte da Imagem (Lado Esquerdo, 40%) */}
-              <Box
-                sx={{
-                  flex: { xs: 1, md: 0.4 }, 
-                  height: "100%",
-                  bgcolor: '#eee', 
-                  display: { xs: 'none', md: 'block' }, 
-                  "& img": {
+          {/*mostrar o loading ou o carrossel */}
+          {isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: { xs: '300px', md: '280px' } }}>
+              <CircularProgress sx={{ color: primaryColor }} />
+            </Box>
+          ) : (
+            <>
+              {/* Loop pelos animais */}
+              {animais.map((pet, i) => (
+                <Box
+                  key={pet.id}
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
-                    objectPosition: "center",
-                  },
-                }}
-              >
-                <img src={pet.foto} alt={pet.nome} />
-              </Box>
-
-              {/* Parte do Texto e Frase (Lado Direito, 60% ou 100% em mobile) */}
-              <Box sx={{
-                flex: { xs: 1, md: 0.6 }, 
-                p: { xs: 3, md: 4 },
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center', 
-                textAlign: { xs: 'center', md: 'left' },
-              }}>
-                <Typography
-                  variant="h6"
-                  component="span"
-                  sx={{
-                    fontWeight: 600,
-                    color: primaryColor,
-                    fontSize: '1rem',
-                    mb: 0.5,
+                    display: "flex", 
+                    alignItems: "stretch", 
+                    opacity: i === idx ? 1 : 0, 
+                    transition: "opacity 0.8s ease-in-out",
+                    bgcolor: '#fff', 
                   }}
                 >
-                  {pet.especie} em destaque
-                </Typography>
-                <Typography
-                  variant="h4"
-                  component="h2"
-                  sx={{
-                    fontWeight: 700,
-                    mb: 1.5,
-                    color: '#1f2937',
-                    fontSize: { xs: '2rem', md: '2.5rem' },
-                    lineHeight: 1.1,
-                  }}
-                >
-                  {pet.nome}
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    mb: 3,
-                    color: '#475569',
-                    fontSize: { xs: '0.95rem', md: '1.05rem' },
-                  }}
-                >
-                  {pet.descricao}
-                </Typography>
-                
-                {/* *** ALTERAÇÃO AQUI: FRASE BONITA NO LUGAR DOS BOTÕES *** */}
-                <Typography
-                    variant="h6"
+                  {/* Imagem animais */}
+                  <Box
                     sx={{
-                        fontWeight: 500,
-                        color: primaryColorHover,
-                        fontStyle: 'italic',
-                        mt: 1,
-                        fontSize: { xs: '1rem', md: '1.1rem' },
+                      flex: { xs: 1, md: 0.4 }, 
+                      height: "100%",
+                      bgcolor: '#eee', 
+                      display: { xs: 'none', md: 'block' }, 
+                      "& img": {
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        objectPosition: "center",
+                      },
                     }}
+                  >
+                    <img 
+                      src={pet.photo_url || pet.foto} 
+                      alt={pet.nome} 
+                    />
+                  </Box>
+
+                  {}
+                  <Box sx={{
+                    flex: { xs: 1, md: 0.6 }, 
+                    p: { xs: 3, md: 4 },
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center', 
+                    textAlign: { xs: 'center', md: 'left' },
+                  }}>
+                    <Typography
+                      variant="h6"
+                      component="span"
+                      sx={{
+                        fontWeight: 600,
+                        color: primaryColor,
+                        fontSize: '1rem',
+                        mb: 0.5,
+                      }}
+                    >
+                      {pet.especie} em destaque
+                    </Typography>
+                    <Typography
+                      variant="h4"
+                      component="h2"
+                      sx={{
+                        fontWeight: 700,
+                        mb: 1.5,
+                        color: '#1f2937',
+                        fontSize: { xs: '2rem', md: '2.5rem' },
+                        lineHeight: 1.1,
+                      }}
+                    >
+                      {pet.nome}
+                    </Typography>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        mb: 3,
+                        color: '#475569',
+                        fontSize: { xs: '0.95rem', md: '1.05rem' },
+                      }}
+                    >
+                      {pet.descricao}
+                    </Typography>
+                    
+                    {}
+                    <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 500,
+                          color: primaryColorHover,
+                          fontStyle: 'italic',
+                          mt: 1,
+                          fontSize: { xs: '1rem', md: '1.1rem' },
+                        }}
+                    >
+                      "O próximo capítulo de uma vida começa com você."
+                    </Typography>
+                    
+                  </Box>
+                </Box>
+              ))}
+
+              {/* Setas de Navegação */}
+              {animais.length > 1 && (
+                <>
+                  <IconButton
+                    onClick={handlePrevPet}
+                    sx={{
+                      position: "absolute",
+                      top: "50%",
+                      left: { xs: 10, md: 20 },
+                      transform: "translateY(-50%)",
+                      bgcolor: "rgba(255,255,255,0.7)",
+                      "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
+                      zIndex: 2,
+                    }}
+                  >
+                    <ArrowBackIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
+                  </IconButton>
+                  <IconButton
+                    onClick={handleNextPet}
+                    sx={{
+                      position: "absolute",
+                      top: "50%",
+                      right: { xs: 10, md: 20 },
+                      transform: "translateY(-50%)",
+                      bgcolor: "rgba(255,255,255,0.7)",
+                      "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
+                      zIndex: 2,
+                    }}
+                  >
+                    <ArrowForwardIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
+                  </IconButton>
+                </>
+              )}
+
+              {/* Bolinhas de navegação */}
+              {animais.length > 1 && (
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  sx={{
+                    position: "absolute",
+                    bottom: "1rem",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    zIndex: 2,
+                  }}
                 >
-                    "O próximo capítulo de uma vida começa com você."
-                </Typography>
-                
-              </Box>
-            </Box>
-          ))}
-
-          {/* Setas de Navegação (MANTIDAS) */}
-          <IconButton
-            onClick={handlePrevPet}
-            sx={{
-              position: "absolute",
-              top: "50%",
-              left: { xs: 10, md: 20 },
-              transform: "translateY(-50%)",
-              bgcolor: "rgba(255,255,255,0.7)",
-              "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
-              zIndex: 2,
-            }}
-          >
-            <ArrowBackIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
-          </IconButton>
-          <IconButton
-            onClick={handleNextPet}
-            sx={{
-              position: "absolute",
-              top: "50%",
-              right: { xs: 10, md: 20 },
-              transform: "translateY(-50%)",
-              bgcolor: "rgba(255,255,255,0.7)",
-              "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
-              zIndex: 2,
-            }}
-          >
-            <ArrowForwardIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
-          </IconButton>
-
-          {/* Bolinhas de navegação (MANTIDAS) */}
-          <Stack
-            direction="row"
-            spacing={0.75}
-            sx={{
-              position: "absolute",
-              bottom: "1rem",
-              left: "50%",
-              transform: "translateX(-50%)",
-              zIndex: 2,
-            }}
-          >
-            {animaisMock.map((pet, i) => (
-              <Box
-                key={pet.id}
-                component="button"
-                onClick={() => setIdx(i)}
-                sx={{
-                  width: "10px",
-                  height: "10px",
-                  borderRadius: "50%",
-                  border: "none",
-                  p: 0,
-                  bgcolor: i === idx ? primaryColor : "rgba(0,0,0,0.2)", 
-                  cursor: "pointer",
-                  transition: "background-color 0.3s ease",
-                  "&:hover": {
-                    bgcolor: i === idx ? primaryColorHover : "rgba(0,0,0,0.4)",
-                  },
-                }}
-              />
-            ))}
-          </Stack>
+                  {animais.map((pet, i) => (
+                    <Box
+                      key={pet.id}
+                      component="button"
+                      onClick={() => setIdx(i)}
+                      sx={{
+                        width: "10px",
+                        height: "10px",
+                        borderRadius: "50%",
+                        border: "none",
+                        p: 0,
+                        bgcolor: i === idx ? primaryColor : "rgba(0,0,0,0.2)", 
+                        cursor: "pointer",
+                        transition: "background-color 0.3s ease",
+                        "&:hover": {
+                          bgcolor: i === idx ? primaryColorHover : "rgba(0,0,0,0.4)",
+                        },
+                      }}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </>
+          )}
         </Paper>
       </Container>
 
 
-      {/* 3. HERO PRINCIPAL (MANTIDO) */}
+      {/* HERO PRINCIPAL  */}
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <Grid container spacing={5} alignItems="center">
           <Grid item xs={12}>
@@ -405,7 +452,7 @@ export default function Landing() {
       </Container>
 
 
-      {/* 4. ADOÇÃO RESPONSÁVEL (MANTIDO) */}
+      {/* ADOÇÃO RESPONSÁVEL*/}
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <Paper
           elevation={0}
@@ -429,7 +476,7 @@ export default function Landing() {
         </Paper>
       </Container>
 
-      {/* 5. SOBRE O ADOPTME (MANTIDO) */}
+      {/* SOBRE O ADOPTME */}
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <Grid container spacing={4} alignItems="stretch">
           

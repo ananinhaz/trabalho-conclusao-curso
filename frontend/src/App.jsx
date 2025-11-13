@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -8,12 +7,13 @@ import Register from "./pages/Register.jsx";
 import AdopterForm from "./pages/AdopterForm.jsx";
 import Donate from "./pages/Donate.jsx";
 import Animals from "./pages/Animals.jsx";
-// se não tiver Home, pode tirar
-// import Home from "./pages/Home.jsx";
+import AnimalEdit from "./pages/AnimalEdit.jsx";
+import Profile from "./pages/Profile.jsx";
+import ProfileEdit from "./pages/ProfileEdit";
 
 import { authApi } from "./api.js";
 
-// guarda a rota e só libera depois de checar o backend
+// ROTA PRIVADA
 function PrivateRoute({ children }) {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -38,10 +38,7 @@ function PrivateRoute({ children }) {
     };
   }, []);
 
-  // 👇 isso aqui impede o “pisca e volta”
-  if (loading) {
-    return <div>Carregando...</div>;
-  }
+  if (loading) return <div>Carregando...</div>;
 
   if (!logged) {
     return (
@@ -55,15 +52,13 @@ function PrivateRoute({ children }) {
   return children;
 }
 
+// ROTAS PRINCIPAIS
 export default function App() {
   return (
     <Routes>
-      {/* públicas */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-
-      {/* protegidas */}
       <Route
         path="/perfil-adotante"
         element={
@@ -72,6 +67,7 @@ export default function App() {
           </PrivateRoute>
         }
       />
+
       <Route
         path="/doar"
         element={
@@ -80,6 +76,7 @@ export default function App() {
           </PrivateRoute>
         }
       />
+
       <Route
         path="/animais"
         element={
@@ -88,18 +85,25 @@ export default function App() {
           </PrivateRoute>
         }
       />
-
-      {/* se tiver home:
       <Route
-        path="/home"
+        path="/animais/editar/:id"
         element={
           <PrivateRoute>
-            <Home />
+            <AnimalEdit />
           </PrivateRoute>
         }
-      /> */}
+      />
+      <Route
+  path="/perfil"
+  element={
+    <PrivateRoute>
+      <Profile />
+    </PrivateRoute>
+  }
+/>
+<Route path="/perfil/editar" element={<PrivateRoute><ProfileEdit /></PrivateRoute>} />
 
-      {/* fallback */}
+      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

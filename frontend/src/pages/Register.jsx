@@ -1,4 +1,3 @@
-// src/pages/Register.jsx
 import { useState } from "react";
 import {
   Alert,
@@ -23,7 +22,7 @@ export default function Register() {
   const location = useLocation();
   
   // Cores e Estilos Comuns
-  const primaryColor = "#6366F1"; // Azul/Roxo do AdoptMe
+  const primaryColor = "#6366F1"; 
   const primaryColorHover = "#4F46E5";
   const cardStyles = {
     borderRadius: "1.25rem",

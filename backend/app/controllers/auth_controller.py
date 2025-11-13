@@ -1,4 +1,3 @@
-# app/controllers/auth_controller.py
 from __future__ import annotations
 import os
 import requests
@@ -10,16 +9,10 @@ from ..extensions.oauth import oauth
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# ======================================================
 # CONFIG
-# ======================================================
-# Vamos padronizar TUDO em 127.0.0.1 pra cookie não dar conflito
 FRONT_DEFAULT = "http://127.0.0.1:5173/"
 GOOGLE_CALLBACK = "http://127.0.0.1:5000/auth/google/callback"
 
-# ======================================================
-# HELPERS
-# ======================================================
 def _get_user_by_id(uid: int):
     with db() as conn:
         cur = conn.cursor(dictionary=True)
@@ -60,9 +53,7 @@ def _commit_and_redirect(url: str):
         {"Content-Type": "text/html; charset=utf-8"},
     )
 
-# ======================================================
 # CADASTRO / LOGIN NORMAL
-# ======================================================
 @bp.post("/register")
 def register():
     data = request.get_json(silent=True) or {}
@@ -119,20 +110,36 @@ def logout():
     session.clear()
     return jsonify(ok=True)
 
-# ======================================================
-# /auth/me  (usado pelo React pra saber se está logado)
-# ======================================================
+# /auth/me  (usado pelo front pra saber se está logado
 @bp.get("/me")
 def me():
+    """
+    Retorna o usuário logado com os dados básicos (id, nome, email, avatar_url).
+    Se não estiver logado, devolve 401 com authenticated: False.
+    """
     print("SESSION NO /me:", dict(session))
+
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"authenticated": False}), 401
-    return jsonify({"authenticated": True, "user_id": user_id})
 
-# ======================================================
+    # Busca o usuário no banco e devolve o objeto completo
+    with db() as conn:
+        with conn.cursor(dictionary=True) as cur:
+            cur.execute(
+                "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
+                (int(user_id),),
+            )
+            user = cur.fetchone()
+
+    if not user:
+        # sessão com user_id inválido limpa sessão por segurança
+        session.clear()
+        return jsonify({"authenticated": False}), 401
+
+    return jsonify({"authenticated": True, "user": user})
+
 # LOGIN COM GOOGLE
-# ======================================================
 @bp.get("/login/google")
 def login_google():
     """
@@ -141,8 +148,6 @@ def login_google():
     next_url = request.args.get("next") or ""
     if next_url:
         session["after_login_next"] = next_url
-
-    # usa SEMPRE o mesmo redirect que está no console do Google
     redirect_uri = GOOGLE_CALLBACK
     print("➡️ redirect_uri que estou mandando pro Google:", redirect_uri)
 
@@ -154,14 +159,14 @@ def login_google():
 
 @bp.get("/google/callback")
 def google_callback():
-    # 1) troca o code pelo token
+    # troca o code pelo token
     token = oauth.google.safe_authorize_access_token()
     print("🔍 Google token:", token)
     access_token = token.get("access_token")
     if not access_token:
         return jsonify(ok=False, error="Google não retornou access_token"), 400
 
-    # 2) pega os dados do usuário no Google
+    # pega os dados do usuario no Google
     resp = requests.get(
         "https://openidconnect.googleapis.com/v1/userinfo",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -181,7 +186,7 @@ def google_callback():
     if not sub:
         return jsonify(ok=False, error="Google não retornou sub"), 400
 
-    # 3) decidir pra onde voltar
+    # decide pra onde voltar
     session_next = session.pop("after_login_next", None)
     state_next = request.args.get("state")
     final_next = (
@@ -190,11 +195,11 @@ def google_callback():
         or FRONT_DEFAULT
     )
 
-    # 4) upsert do usuário
+    # upsert do usuário
     with db() as conn:
         cur = conn.cursor(dictionary=True)
 
-        # 4.1) procura por google_sub
+        # procura por google_sub
         cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
         u = cur.fetchone()
         if u:
@@ -205,7 +210,7 @@ def google_callback():
             print("✅ login google: achou por google_sub ->", user_id)
             return _commit_and_redirect(final_next)
 
-        # 4.2) procura por email
+        # procura por email
         if email:
             cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
             u = cur.fetchone()
@@ -223,7 +228,7 @@ def google_callback():
                 print("✅ login google: achou por email e vinculou ->", user_id)
                 return _commit_and_redirect(final_next)
 
-        # 4.3) não achou, cria
+        # não achou, cria
         cur.close()
         cur = conn.cursor()
         cur.execute(

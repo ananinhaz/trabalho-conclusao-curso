@@ -1,10 +1,9 @@
-// src/api.js
 const API_BASE = '/api';
 
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   const res = await fetch(API_BASE + path, {
     method,
-    credentials: 'include',          // <<< importante pro cookie da sessão
+    credentials: 'include', 
     headers: {
       'Content-Type': 'application/json',
       ...(headers || {}),
@@ -33,7 +32,7 @@ export function apiDel(path) {
   return apiFetch(path, { method: 'DELETE' });
 }
 
-// -------------------- AUTH --------------------
+// AUTH 
 export const authApi = {
   me() {
     return apiGet('/auth/me');
@@ -47,7 +46,7 @@ export const authApi = {
   logout() {
     return apiPost('/auth/logout', {});
   },
-  // 👇 AGORA recebe o next e repassa pro Flask
+  // redireciona para o endpoint que inicia o OAuth no backend
   loginWithGoogle(nextPath) {
     const url =
       '/api/auth/login/google' +
@@ -56,7 +55,7 @@ export const authApi = {
   },
 };
 
-// -------------------- PERFIL ADOTANTE --------------------
+// PERFIL ADOTANTE 
 export const perfilApi = {
   get() {
     return apiGet('/perfil_adotante');
@@ -66,30 +65,44 @@ export const perfilApi = {
   },
 };
 
-// -------------------- ANIMAIS --------------------
+// ANIMAIS 
 export const animaisApi = {
+  // lista pública com filtros (usa apiGet 
   list(params = {}) {
     const qs = new URLSearchParams(
       Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
     ).toString();
     const suffix = qs ? `?${qs}` : '';
-    return apiGet('/animais' + suffix);
+    return apiGet(`/animais${suffix}`);
   },
+
+  // animais do usuário
   mine() {
     return apiGet('/animais/mine');
   },
+
+  // detalhe do animal
+  get(id) {
+    return apiGet(`/animais/${id}`);
+  },
+
+  // criar novo
   create(payload) {
     return apiPost('/animais', payload);
   },
+
+  // atualizar
   update(id, payload) {
     return apiPut(`/animais/${id}`, payload);
   },
+
+  // remover
   remove(id) {
     return apiDel(`/animais/${id}`);
   },
 };
 
-// -------------------- RECOMENDAÇÕES --------------------
+// RECOMENDAÇÕES
 export const recApi = {
   list(n = 12) {
     return apiGet(`/recomendacoes?n=${n}`);

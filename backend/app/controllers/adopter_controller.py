@@ -1,4 +1,3 @@
-# backend/app/controllers/adopter_controller.py
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, session
 from flask_cors import cross_origin
@@ -6,7 +5,6 @@ from ..extensions.db import get_conn
 
 bp = Blueprint("adopter", __name__)
 
-# ORIGENS que você usa no front
 ALLOWED_ORIGINS = [
     "http://127.0.0.1:8080",
     "http://localhost:8080",
@@ -23,11 +21,8 @@ ALLOWED_ORIGINS = [
     max_age=600,
 )
 def save_adopter_profile():
-    # 1) Responder o preflight antes de qualquer lógica
     if request.method == "OPTIONS":
         return ("", 204)
-
-    # 2) Checagem de sessão (somente no POST real)
     uid = session.get("user_id")
     if not uid:
         return jsonify({"error": "unauthenticated"}), 401
