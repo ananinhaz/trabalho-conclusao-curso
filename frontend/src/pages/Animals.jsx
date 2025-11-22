@@ -29,6 +29,7 @@ import ChildFriendlyIcon from '@mui/icons-material/ChildFriendly'
 import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded'; // Ícone escolhido
 
 export default function Animals({ user: userProp }) {
   const navigate = useNavigate()
@@ -40,13 +41,14 @@ export default function Animals({ user: userProp }) {
 
   // filtros 
   const [filterEspecie, setFilterEspecie] = useState('Todas')
-  const [filterIdadeCat, setFilterIdadeCat] = useState('Todas') // Filhote / Adulto / Idoso / Todas
+  const [filterIdadeCat, setFilterIdadeCat] = useState('Todas')
   const [filterPorte, setFilterPorte] = useState('Todas')
   const [filterCidade, setFilterCidade] = useState('')
 
   const primaryColor = '#6366F1'
   const primaryColorHover = '#4F46E5'
   const forteColor = '#22C55E'
+  const adotadoColor = '#D946EF'
 
   const cardStyles = {
     borderRadius: '0.9rem',
@@ -54,13 +56,14 @@ export default function Animals({ user: userProp }) {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    minHeight: 360, 
+    minHeight: 440,
     transition: 'transform 0.2s, box-shadow 0.2s',
     '&:hover': {
       transform: 'translateY(-4px)',
       boxShadow: '0 18px 40px rgba(15,23,42,0.08)',
     },
   }
+
   const mainPaperStyles = {
     borderRadius: '1rem',
     boxShadow: '0 10px 30px rgba(15,23,42,0.015)',
@@ -109,15 +112,27 @@ export default function Animals({ user: userProp }) {
   )
 
   const baseData = tab === 'mine' ? mine : tab === 'recs' ? recommendedItems : all || []
+  const orderedBaseData = useMemo(() => {
+    const data = baseData || []
+    if (tab !== 'all') return data
 
-  // categorização de idade
+    const byId = new Map(data.map((d) => [Number(d.id), d]))
+
+    // pega os recomendados que existem em todos na ordem de recommendedItems
+    const recsInAll = (recommendedItems || [])
+      .map((r) => byId.get(Number(r.id)))
+      .filter(Boolean)
+
+    const others = data.filter((d) => !recIdSet.has(Number(d.id)))
+
+    return [...recsInAll, ...others]
+  }, [baseData, tab, recommendedItems, recIdSet])
+
   function getAgeCategory(raw) {
     if (!raw && raw !== 0) return 'Adulto'
     const s = String(raw).toLowerCase()
-    // se API já devolve palavras:
     if (s.includes('filh') || s.includes('filhote')) return 'Filhote'
     if (s.includes('idos') || s.includes('idoso')) return 'Idoso'
-    // se é número:
     const n = Number(s)
     if (!Number.isNaN(n)) {
       if (n <= 1) return 'Filhote'
@@ -127,7 +142,6 @@ export default function Animals({ user: userProp }) {
     return 'Adulto'
   }
 
-  // especie, porte
   const options = useMemo(() => {
     const especies = new Set()
     const portes = new Set()
@@ -144,45 +158,64 @@ export default function Animals({ user: userProp }) {
     }
   }, [all])
 
-  // Filtragem em memória
   const filteredData = useMemo(() => {
-    return (baseData || []).filter((animal) => {
-      // especie
-      if (filterEspecie && filterEspecie !== 'Todas') {
-        if (!animal.especie || String(animal.especie) !== filterEspecie) return false
-      }
-      // porte
-      if (filterPorte && filterPorte !== 'Todas') {
-        if (!animal.porte || String(animal.porte) !== filterPorte) return false
-      }
-      // cidade 
-      if (filterCidade && filterCidade.trim() !== '') {
-        const city = String(animal.cidade || '').toLowerCase()
-        if (!city.includes(filterCidade.trim().toLowerCase())) return false
-      }
-      // idade categoria
-      if (filterIdadeCat && filterIdadeCat !== 'Todas') {
-        const cat = getAgeCategory(animal.idade)
-        if (cat !== filterIdadeCat) return false
-      }
+    return (orderedBaseData || []).filter((animal) => {
+      if (filterEspecie && filterEspecie !== 'Todas' && (!animal.especie || String(animal.especie) !== filterEspecie)) return false
+      if (filterPorte && filterPorte !== 'Todas' && (!animal.porte || String(animal.porte) !== filterPorte)) return false
+      if (filterCidade && filterCidade.trim() !== '' && !String(animal.cidade || '').toLowerCase().includes(filterCidade.trim().toLowerCase())) return false
+      if (filterIdadeCat && filterIdadeCat !== 'Todas' && getAgeCategory(animal.idade) !== filterIdadeCat) return false
       return true
     })
-  }, [baseData, filterEspecie, filterPorte, filterCidade, filterIdadeCat])
+  }, [orderedBaseData, filterEspecie, filterPorte, filterCidade, filterIdadeCat])
 
   async function handleDelete(id) {
     if (!window.confirm('Excluir anúncio?')) return
     await animaisApi.remove(id)
     setAll((prev) => prev.filter((x) => x.id !== id))
     setMine((prev) => prev.filter((x) => x.id !== id))
-    setRecs((prev) => ({
-      ...prev,
-      items: (prev.items || []).filter((x) => x.id !== id),
-      ids: (prev.ids || []).filter((x) => x !== id),
-    }))
+    setRecs((prev) => ({ ...prev, items: (prev.items || []).filter((x) => x.id !== id) }))
   }
 
   function handleEdit(id) {
     navigate(`/animais/editar/${id}`)
+  }
+
+  async function handleAdoptToggle(animal) {
+    try {
+      const isMine = Number(animal.doador_id || 0) === Number(user?.id || 0)
+      if (!isMine) {
+        alert('Apenas o responsável pelo anúncio pode marcar como adotado.')
+        return
+      }
+      const already = Boolean(animal.adotado_em)
+      const action = already ? 'undo' : 'mark'
+      const confirmMsg = already ? 'Deseja marcar este animal como disponível novamente?' : 'Confirma marcar este animal como ADOTADO? Parabéns! 🎉'
+      if (!window.confirm(confirmMsg)) return
+
+      const resp = await animaisApi.adopt(animal.id, { action })
+      const updated = (resp && resp.animal) ? resp.animal : null
+
+      if (updated) {
+        setAll((prev) => prev.map((a) => (Number(a.id) === Number(updated.id) ? updated : a)))
+        setMine((prev) => prev.map((a) => (Number(a.id) === Number(updated.id) ? updated : a)))
+        setRecs((prev) => ({
+          ...prev,
+          items: (prev.items || []).map((a) => (Number(a.id) === Number(updated.id) ? updated : a)),
+        }))
+      } else {
+        // Fallback local se a API não retornar o objeto atualizado completo
+        const localUpdated = { ...animal, adotado_em: action === 'mark' ? new Date().toISOString().slice(0, 10) : null }
+        setAll((prev) => prev.map((a) => (Number(a.id) === Number(localUpdated.id) ? localUpdated : a)))
+        setMine((prev) => prev.map((a) => (Number(a.id) === Number(localUpdated.id) ? localUpdated : a)))
+        setRecs((prev) => ({
+          ...prev,
+          items: (prev.items || []).map((a) => (Number(a.id) === Number(localUpdated.id) ? localUpdated : a)),
+        }))
+      }
+    } catch (err) {
+      console.error('Erro ao marcar adotado:', err)
+      alert('Erro ao atualizar o status de adoção.')
+    }
   }
 
   const getAvatarSrc = () => {
@@ -198,6 +231,7 @@ export default function Animals({ user: userProp }) {
   const avatarSrc = getAvatarSrc()
   const userInitials = user?.nome ? user.nome.split(' ').map((n) => n[0]).join('').toUpperCase().substring(0, 2) : 'U'
   const handleProfileClick = () => (window.location.href = '/perfil')
+  
   const AttributeChip = ({ label, icon }) => (
     <Chip
       label={label}
@@ -263,11 +297,34 @@ export default function Animals({ user: userProp }) {
                   boxShadow: 'none',
                   '&:hover': { bgcolor: tab === tabValue ? primaryColorHover : '#F4F4FE', borderColor: primaryColorHover },
                   ...(tabValue === 'all' && { display: { xs: 'none', sm: 'flex' } }),
+                  
                 }}
               >
                 {tabValue === 'all' ? 'Todos' : tabValue === 'mine' ? 'Meus anúncios' : 'Recomendados'}
               </Button>
+              
             ))}
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate("/doar")}
+              sx={{
+                borderRadius: '9999px',
+                bgcolor: '#fff',
+                borderColor: primaryColor,
+                color: primaryColor,
+                textTransform: 'none',
+                fontWeight: 500,
+                fontSize: '0.875rem',
+                height: '36px',
+                padding: '0 14px',
+                boxShadow: 'none',
+                '&:hover': { bgcolor: '#F4F4FE', borderColor: primaryColorHover },
+                display: { xs: 'none', sm: 'inline-flex' },
+              }}
+            >
+              Quero doar
+            </Button>
           </Stack>
         </Stack>
 
@@ -275,81 +332,38 @@ export default function Animals({ user: userProp }) {
           <Box sx={{ display: 'flex', gap: 1.25, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
             <FormControl size="small" sx={{ minWidth: 160, borderRadius: 2 }}>
               <InputLabel id="f-especie-label">Espécie</InputLabel>
-              <Select
-                labelId="f-especie-label"
-                value={filterEspecie}
-                label="Espécie"
-                onChange={(e) => setFilterEspecie(e.target.value)}
-                sx={{
-                  borderRadius: '10px',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E6E8FF' },
-                }}
-              >
-                {options.especies.map((sp) => (
-                  <MenuItem key={sp} value={sp}>
-                    {sp}
-                  </MenuItem>
-                ))}
+              <Select labelId="f-especie-label" value={filterEspecie} label="Espécie" onChange={(e) => setFilterEspecie(e.target.value)} sx={{ borderRadius: '10px', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E6E8FF' } }}>
+                {options.especies.map((sp) => <MenuItem key={sp} value={sp}>{sp}</MenuItem>)}
               </Select>
             </FormControl>
-
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel id="f-idade-label">Idade</InputLabel>
-              <Select
-                labelId="f-idade-label"
-                value={filterIdadeCat}
-                label="Idade"
-                onChange={(e) => setFilterIdadeCat(e.target.value)}
-                sx={{ borderRadius: '10px' }}
-              >
+              <Select labelId="f-idade-label" value={filterIdadeCat} label="Idade" onChange={(e) => setFilterIdadeCat(e.target.value)} sx={{ borderRadius: '10px' }}>
                 <MenuItem value="Todas">Todas</MenuItem>
                 <MenuItem value="Filhote">Filhote</MenuItem>
                 <MenuItem value="Adulto">Adulto</MenuItem>
                 <MenuItem value="Idoso">Idoso</MenuItem>
               </Select>
             </FormControl>
-
             <FormControl size="small" sx={{ minWidth: 140 }}>
               <InputLabel id="f-porte-label">Porte</InputLabel>
-              <Select
-                labelId="f-porte-label"
-                value={filterPorte}
-                label="Porte"
-                onChange={(e) => setFilterPorte(e.target.value)}
-                sx={{ borderRadius: '10px' }}
-              >
-                {options.portes.map((pt) => (
-                  <MenuItem key={pt} value={pt}>
-                    {pt}
-                  </MenuItem>
-                ))}
+              <Select labelId="f-porte-label" value={filterPorte} label="Porte" onChange={(e) => setFilterPorte(e.target.value)} sx={{ borderRadius: '10px' }}>
+                {options.portes.map((pt) => <MenuItem key={pt} value={pt}>{pt}</MenuItem>)}
               </Select>
             </FormControl>
-
-            <TextField
-              size="small"
-              placeholder="Cidade"
-              value={filterCidade}
-              onChange={(e) => setFilterCidade(e.target.value)}
-              sx={{
-                minWidth: 180,
-                borderRadius: '10px',
-                '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E6E8FF' },
-              }}
-            />
-
-            <Button variant="outlined" onClick={clearFilters} sx={{ height: 36, borderRadius: '10px' }}>
-              LIMPAR FILTROS
-            </Button>
+            <TextField size="small" placeholder="Cidade" value={filterCidade} onChange={(e) => setFilterCidade(e.target.value)} sx={{ minWidth: 180, '& .MuiOutlinedInput-root': { borderRadius: '10px' }, '& .MuiOutlinedInput-notchedOutline': { borderColor: '#E6E8FF' } }} />
+            <Button variant="outlined" onClick={clearFilters} sx={{ height: 36, borderRadius: '10px' }}>LIMPAR FILTROS</Button>
           </Box>
 
-          <Grid container spacing={3}>
+          <Grid container spacing={3} justifyContent="center">
             {filteredData.length === 0 && <Typography sx={{ p: 2, color: '#475569' }}>Nenhum resultado.</Typography>}
 
             {filteredData.map((animal) => {
               const isRecommended = recIdSet.has(Number(animal.id))
               const isMine = Number(animal.doador_id || 0) === Number(user?.id || 0)
+              const isAdopted = Boolean(animal.adotado_em)
 
+              // Lógica de selo
               let seloCor = primaryColor
               let seloLabel = 'Recomendado para você'
               const recIndex = recommendedItems.findIndex((item) => Number(item.id) === Number(animal.id))
@@ -360,8 +374,17 @@ export default function Animals({ user: userProp }) {
               }
 
               return (
-                <Grid item xs={12} sm={6} md={4} key={animal.id}>
-                  <Paper sx={{ ...cardStyles }}>
+                <Grid item xs={12} sm={6} md={4} key={animal.id} sx={{ display: 'flex' }}>
+                  <Paper
+                    sx={{
+                      ...cardStyles,
+                      flex: 1,
+                      maxWidth: 480,
+                      margin: '0 auto',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
                     {/* selo */}
                     {isRecommended && (
                       <Stack direction="row" alignItems="center" justifyContent="center" sx={{ pt: 1.2, mb: 0.6 }}>
@@ -371,7 +394,9 @@ export default function Animals({ user: userProp }) {
                         </Typography>
                       </Stack>
                     )}
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pt: isRecommended ? 0 : 1.2 }}>
+
+                    {/* img+selo adotado*/}
+                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pt: isRecommended ? 0 : 1.2, position: 'relative' }}>
                       <Box
                         sx={{
                           width: 150,
@@ -379,19 +404,45 @@ export default function Animals({ user: userProp }) {
                           backgroundImage: `url('${animal.photo_url || ''}')`,
                           backgroundPosition: 'center',
                           backgroundSize: 'cover',
-                          backgroundRepeat: 'no-repeat',
                           borderRadius: '50%',
                           boxShadow: '0 8px 22px rgba(0,0,0,0.08)',
                           border: '6px solid #fff',
                           mt: -1,
+                          position: 'relative',
                         }}
                       />
+                      
+                      {/* selo sobre a foto */}
+                      {isAdopted && (
+                        <Box sx={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          bgcolor: 'rgba(255,255,255,0.85)', 
+                          borderRadius: '20px',
+                          px: 1.5,
+                          py: 0.5,
+                          display: 'flex',
+                          alignItems: 'center',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                          zIndex: 5
+                        }}>
+                          <VolunteerActivismRoundedIcon sx={{ color: adotadoColor, fontSize: 20, mr: 0.5 }} />
+                          <Typography variant="caption" sx={{ fontWeight: 800, color: adotadoColor, letterSpacing: 0.5 }}>
+                            ADOTADO
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
-                    <Box sx={{ p: 2, pt: 1.2, flexGrow: 1, textAlign: 'center' }}>
+
+                    <Box sx={{ p: 2, pt: 1.2, flexGrow: 1, display: 'flex', flexDirection: 'column', textAlign: 'center' }}>
                       <Typography fontWeight={700} color="#0f172a" sx={{ fontSize: '1.05rem', mb: 0.6 }}>
                         {animal.nome}
                       </Typography>
-                      <Stack direction="row" spacing={0.6} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
+                      
+                      {/* Chips */}
+                      <Stack direction="row" spacing={0.6} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5, justifyContent: 'center', minHeight: 44 }}>
                         <AttributeChip label={animal.especie} icon={<PetsIcon />} />
                         {animal.porte && <AttributeChip label={animal.porte} icon={<PetsIcon />} />}
                         {animal.idade && <AttributeChip label={`${animal.idade} ${Number(animal.idade) > 1 ? 'anos' : 'ano'}`} icon={<CakeIcon />} />}
@@ -411,9 +462,12 @@ export default function Animals({ user: userProp }) {
                       <Typography variant="body2" sx={{ mt: 1, color: '#475569', minHeight: 40, fontSize: '0.86rem' }}>
                         {animal.descricao || 'Nenhuma descrição detalhada fornecida.'}
                       </Typography>
-                      <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid #f1f5f9' }}>
+
+                      {/* area de ação */}
+                      <Box sx={{ mt: 2, pt: 1, borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Stack direction="row" spacing={0.5} justifyContent="center" alignItems="center">
-                          {animal.donor_whatsapp && (
+                          {/* Visitante vê botão de contato se NÃO adotado */}
+                          {animal.donor_whatsapp && !isMine && !isAdopted && (
                             <Tooltip title="Falar com doador">
                               <IconButton
                                 href={`https://wa.me/${animal.donor_whatsapp}`}
@@ -428,8 +482,27 @@ export default function Animals({ user: userProp }) {
 
                           {isMine && (
                             <>
+                              {/* Marcar Adotado / Desmarcar */}
+                              <Tooltip title={isAdopted ? "Marcar como disponível" : "Marcar como adotado"}>
+                                <IconButton
+                                  onClick={() => handleAdoptToggle(animal)}
+                                  size="small"
+                                  sx={{
+                                    mr: 0.6,
+                                    transition: 'transform 0.18s ease, color 0.18s ease',
+                                    color: isAdopted ? adotadoColor : '#6366F1', 
+                                    '&:hover': { 
+                                      transform: 'scale(1.12)', 
+                                      color: isAdopted ? '#D946EF' : adotadoColor 
+                                    },
+                                  }}
+                                >
+                                  <VolunteerActivismRoundedIcon sx={{ fontSize: 28 }} />
+                                </IconButton>
+                              </Tooltip>
+
                               <Tooltip title="Editar anúncio">
-                                <IconButton onClick={() => handleEdit(animal.id)} size="small" sx={{ color: primaryColor, '&:hover': { bgcolor: 'rgba(99,102,241,0.06)' } }}>
+                                <IconButton onClick={() => handleEdit(animal.id)} size="small" sx={{ color: '#8c8c90ff', '&:hover': { bgcolor: 'rgba(99,102,241,0.06)' } }}>
                                   <EditIcon sx={{ fontSize: 25 }} />
                                 </IconButton>
                               </Tooltip>

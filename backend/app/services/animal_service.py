@@ -1,9 +1,7 @@
-# backend/app/services/animal_service.py
 from typing import Any, Dict, List, Optional
 from flask import session
 from ..extensions.db import get_conn
 
-# ---------- helpers ----------
 def _first(data: Dict[str, Any], *keys, default=None):
     for k in keys:
         v = data.get(k, None)
@@ -12,10 +10,8 @@ def _first(data: Dict[str, Any], *keys, default=None):
     return default
 
 def _get_user_id() -> Optional[int]:
-    # ajuste aqui se você salva com outra chave na sessão
     return session.get("user_id") or session.get("uid")
 
-# ---------- CRUD ----------
 def criar(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Aceita tanto nomes PT-BR quanto EN:
@@ -81,7 +77,6 @@ def criar(data: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": True, "id": cur.lastrowid}
     except Exception as e:
         conn.rollback()
-        # propaga como 400 lá no controller
         raise e
     finally:
         cur.close()
@@ -98,7 +93,7 @@ def listar(qs=None) -> List[Dict[str, Any]]:
     cidade     = qs.get("cidade") or qs.get("city")
     idade_min  = qs.get("idade_min")
     idade_max  = qs.get("idade_max")
-    show       = qs.get("show")  # "recommended" para habilitar ranking
+    show       = qs.get("show")  
 
     user_id = _get_user_id()
 
@@ -128,7 +123,6 @@ def listar(qs=None) -> List[Dict[str, Any]]:
         where.append("COALESCE(a.city, a.cidade) LIKE CONCAT('%', %s, '%')")
         params.append(cidade)
 
-    # idades (opcionais)
     if idade_min:
         where.append("a.idade IS NOT NULL AND a.idade >= %s")
         params.append(int(idade_min))
@@ -138,13 +132,9 @@ def listar(qs=None) -> List[Dict[str, Any]]:
 
     if where:
         base_sql += " AND " + " AND ".join(where)
-
-    # Ordenação / recomendação
     order_sql = " ORDER BY COALESCE(a.created_at, a.criado_em) DESC"
 
-    # Recomendação simples baseada no perfil do adotante
     if show == "recommended" and user_id:
-        # boosts por match de porte, presença de crianças etc.
         rec_sql = f"""
             SELECT z.* FROM (
                 {base_sql}
@@ -152,9 +142,6 @@ def listar(qs=None) -> List[Dict[str, Any]]:
             LEFT JOIN perfil_adotante p ON p.usuario_id = %s
         """
         params_rec = params + [user_id]
-        # score:
-        # +3 se p.tem_criancas=1 e animal é bom com crianças
-        # +2 se porte casa com "Apartamento" (preferir pequeno/médio)
         score = """
             SELECT
               z.*,
@@ -174,14 +161,12 @@ def listar(qs=None) -> List[Dict[str, Any]]:
         try:
             cur.execute(score, params + [user_id])
             rows = cur.fetchall()
-            # front usa um check/selo — mandamos a flag
             for r in rows:
                 r["recommended"] = True if r.get("rec_score", 0) > 0 else False
             return rows
         finally:
             cur.close()
 
-    # Sem recomendação: lista normal
     conn = get_conn()
     cur = conn.cursor(dictionary=True)
     try:
@@ -212,7 +197,6 @@ def obter(aid: int) -> Optional[Dict[str, Any]]:
         cur.close()
 
 def atualizar(aid: int, data: Dict[str, Any]) -> bool:
-    # atualização simples (só alguns campos comuns)
     fields = []
     params = []
 

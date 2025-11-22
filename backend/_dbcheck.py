@@ -10,7 +10,7 @@ cfg = dict(
     password=os.getenv('DB_PASSWORD',''),
     database=os.getenv('DB_NAME','adoptme'),
     connection_timeout=5,
-    allow_public_key_retrieval=True,  # ajuda com caching_sha2 sem TLS
+    allow_public_key_retrieval=True,  
 )
 print('CFG=', cfg)
 try:

@@ -1,4 +1,3 @@
-# app/extensions/oauth.py
 import os
 import requests
 from flask import request
@@ -10,9 +9,7 @@ oauth = OAuth()
 def init_oauth(app):
     oauth.init_app(app)
 
-    # =====================================================
-    # Registro completo do cliente Google com OpenID
-    # =====================================================
+    # Registro  do cliente Google com OpenID
     oauth.register(
         name="google",
         client_id=os.getenv("GOOGLE_CLIENT_ID"),
@@ -21,9 +18,7 @@ def init_oauth(app):
         client_kwargs={"scope": "openid email profile"},
     )
 
-    # =====================================================
-    # Fallback para ambiente localhost (state perdido)
-    # =====================================================
+    # fallback para ambiente localhost, state perdido
     def safe_authorize_access_token():
         """
         Executa o fluxo OAuth normal. Se der erro de MismatchingStateError

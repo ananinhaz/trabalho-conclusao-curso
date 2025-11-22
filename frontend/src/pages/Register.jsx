@@ -21,7 +21,6 @@ export default function Register() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Cores e Estilos Comuns
   const primaryColor = "#6366F1"; 
   const primaryColorHover = "#4F46E5";
   const cardStyles = {
@@ -39,15 +38,15 @@ export default function Register() {
     setOk(false);
 
     try {
-      // 1) cria o usuário
+      // cria o usuário
       await authApi.register(nome.trim(), email.trim(), senha);
 
-      // 2) faz login automático
+      // faz login automático
       await authApi.login(email.trim(), senha);
 
       setOk(true);
 
-      // 3) vai para o fluxo que o usuário queria
+      // vai para o fluxo que o usuário queria
       navigate(next, { replace: true });
     } catch (err) {
       setMsg(err.message || "Falha no cadastro");

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from ..extensions.db import get_conn  # Certifique-se que essa função existe (retorna conexão mysql.connector)
+from ..extensions.db import get_conn 
 from ..recommendation.engine import knn_rank
 
 
@@ -19,7 +19,6 @@ def _carregar_prefs(usuario_id: Optional[int], params: Dict[str, Any]) -> Dict[s
         if params.get("tempo_disponivel_horas_semana")
         else None,
         "estilo_vida": params.get("estilo_vida"),
-        # opcional
         "especie_pref": params.get("especie_pref"),
     }
 
@@ -43,10 +42,8 @@ def _carregar_prefs(usuario_id: Optional[int], params: Dict[str, Any]) -> Dict[s
                     if v is not None:
                         prefs[k] = v
         except Exception:
-            # mantém params como fallback
             pass
 
-    # Defaults sensatos
     if prefs["tipo_moradia"] is None:
         prefs["tipo_moradia"] = "Apartamento"
     if prefs["tem_criancas"] is None:

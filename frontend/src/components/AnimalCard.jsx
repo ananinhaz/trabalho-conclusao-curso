@@ -1,4 +1,3 @@
-// src/components/AnimalCard.jsx
 import {
   Card,
   CardContent,

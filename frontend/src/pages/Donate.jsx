@@ -23,7 +23,7 @@ export default function Donate() {
     idade: '',
     porte: '',
     energia: 'Média', 
-    bom_com_criancas: 0, // 0 = Não, 1 = Sim
+    bom_com_criancas: 0, 
     descricao: '',
     cidade: '',
     photo_url: '', 
@@ -35,11 +35,10 @@ export default function Donate() {
   const [customEspecie, setCustomEspecie] = useState('')
 
 
-  //CONFIGURAÇÃO DO UPLOAD
+  //config upload
   const CLOUDINARY_CLOUD_NAME = 'dqytx0v16' 
   const CLOUDINARY_UPLOAD_PRESET = 'Ana_Rocha' 
 
-  // Cores e Estilos Comuns
   const primaryColor = "#6366F1";
   const primaryColorHover = "#4F46E5";
   const cardStyles = {
@@ -97,7 +96,7 @@ export default function Donate() {
     }
 
     let finalForm = form
-    // LÓGICA DE TRATAMENTO DA ESPÉCIE
+
     if (form.especie === 'Outro') {
         if (!customEspecie.trim()) {
             setMsg("Por favor, especifique qual é a espécie do animal no campo 'Qual espécie?'.")
@@ -146,7 +145,7 @@ export default function Donate() {
               value={form.especie}
               onChange={e => {
                 setForm(f => ({ ...f, especie: e.target.value }))
-                // Se o usuário voltar para Cachorro/Gato, limpa o campo customizado
+                // Se  voltar para Cachorro/Gato, limpa o campo customizado
                 if (e.target.value !== 'Outro') {
                     setCustomEspecie('');
                 }
@@ -164,7 +163,7 @@ export default function Donate() {
                     label="Qual espécie? (Ex: Coelho, Calopsita)"
                     value={customEspecie}
                     onChange={e => setCustomEspecie(e.target.value)}
-                    required // Torna o campo obrigatório
+                    required 
                     fullWidth
                 />
             )}
@@ -239,7 +238,7 @@ export default function Donate() {
               fullWidth
             />
             
-            {/* --- CAMPO DE UPLOAD DE FOTO --- */}
+            {/* upload da foto */}
             <Button
               variant="outlined"
               component="label" 
@@ -288,7 +287,7 @@ export default function Donate() {
               type="submit" 
               variant="contained"
               fullWidth
-              disabled={isUploading} // Desabilita o botão principal durante o upload
+              disabled={isUploading} 
               sx={{
                 background: primaryColor,
                 py: 1.2,

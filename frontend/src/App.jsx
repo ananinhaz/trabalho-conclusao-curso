@@ -13,7 +13,7 @@ import ProfileEdit from "./pages/ProfileEdit";
 
 import { authApi } from "./api.js";
 
-// ROTA PRIVADA
+// rota privada
 function PrivateRoute({ children }) {
   const location = useLocation();
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ function PrivateRoute({ children }) {
   return children;
 }
 
-// ROTAS PRINCIPAIS
+// Rotas principais
 export default function App() {
   return (
     <Routes>

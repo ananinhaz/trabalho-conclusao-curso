@@ -1,92 +1,81 @@
-// src/pages/Landing.jsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-// Importa o módulo de API que contém animaisApi.list
 import { animaisApi } from '../api'; 
+import AdoptionChart from "../components/AdoptionChart";
+import Footer from '../components/Footer';
+import MetricsCards from '../components/MetricsCards';
+
 import {
-  Box,
-  Container,
-  Paper,
-  Typography,
-  Button,
-  Grid,
-  Stack,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  IconButton,
-  CircularProgress,
+  Box,
+  Container,
+  Paper,
+  Typography,
+  Button,
+  Grid,
+  Stack,
+  IconButton,
+  CircularProgress,
 } from "@mui/material";
 import PetsIcon from "@mui/icons-material/Pets";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
 
-
 export default function Landing() {
-  const navigate = useNavigate();
+  const navigate = useNavigate();
 
-  // 1. ESTADOS PARA DADOS REAIS E CARREGAMENTO
-  const [animais, setAnimais] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [idx, setIdx] = useState(0);
+  const [animais, setAnimais] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [idx, setIdx] = useState(0);
 
-  // 2. LÓGICA DE BUSCA DE DADOS REAIS DO BACKEND (API)
-  useEffect(() => {
-    async function fetchAnimais() {
-      try {
-        // Chama o endpoint /api/animais
-        const response = await animaisApi.list(); 
-        
-        let fetchedAnimais = [];
+  useEffect(() => {
+    async function fetchAnimais() {
+      try {
+        const response = await animaisApi.list(); 
+        
+        let fetchedAnimais = [];
 
-        // 💡 MUDANÇA: Verifica se a resposta é um array direto OU se o array está na chave 'animais'
         if (Array.isArray(response)) {
-            // Caso 1: API retorna o array diretamente: [{}, {}, ...]
             fetchedAnimais = response.slice(0, 10);
-        } else if (Array.isArray(response.animais)) {
-            // Caso 2: API retorna o array dentro da chave 'animais': { animais: [...] }
+        } else if (response && Array.isArray(response.animais)) {
             fetchedAnimais = response.animais.slice(0, 10);
         } else {
             console.warn("A resposta da API não está no formato de array ou { animais: array }.", response);
         }
 
-        
-        // Se não houver animais reais, usa um fallback estático.
-        if (fetchedAnimais.length === 0) {
-            console.warn("API retornou 0 animais, usando fallback estático no carrossel.");
-            setAnimais([{
-                id: 'fallback',
-                nome: "Mascote",
-                especie: "Cachorro",
-                descricao: "Adote um amigo, mude uma vida. Clique em 'Quero adotar'.",
-                // Garante que há uma imagem de fallback para evitar erros
-                photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg", 
-            }]);
-        } else {
-            // Agora, se houver dados, eles serão carregados
-            setAnimais(fetchedAnimais);
-        }
+        // Se não houver animais reais, usa um fallback estático
+        if (fetchedAnimais.length === 0) {
+            console.warn("API retornou 0 animais, usando fallback estático no carrossel.");
+            setAnimais([{
+                id: 'fallback',
+                nome: "Mascote",
+                especie: "Cachorro",
+                descricao: "Adote um amigo, mude uma vida. Clique em 'Quero adotar'.",
+                // Garante que há uma imagem de fallback para evitar erros
+                photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg", 
+            }]);
+        } else {
+            // se houver dados, eles serão carregados
+            setAnimais(fetchedAnimais);
+        }
 
-      } catch (error) {
-        console.error("Erro ao carregar animais para o carrossel. Verifique se o backend está rodando e se a rota /api/animais está acessível.", error);
-        // Fallback em caso de erro de conexão
-        setAnimais([{
-            id: 'fallback-error',
-            nome: "Mascote",
-            especie: "Cachorro",
-            descricao: "O AdoptMe está carregando... Adote um amigo!",
-            photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg",
-        }]);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    fetchAnimais();
-  }, []); 
+      } catch (error) {
+        console.error("Erro ao carregar animais para o carrossel. Verifique se o backend está rodando e se a rota /api/animais está acessível.", error);
+        // Fallback em caso de erro de conexão
+        setAnimais([{
+            id: 'fallback-error',
+            nome: "Mascote",
+            especie: "Cachorro",
+            descricao: "O AdoptMe está carregando... Adote um amigo!",
+            photo_url: "https://images.dog.ceo/breeds/retriever-golden/n02099601_5654.jpg",
+        }]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchAnimais();
+  }, []); 
 
- //CARROSSEL AUTOMÁTICO
+  // carrossel
   useEffect(() => {
     if (animais.length > 0) {
       const t = setInterval(() => {
@@ -108,7 +97,6 @@ export default function Landing() {
   const primaryColor = "#6366F1";
   const primaryColorHover = "#4F46E5";
 
-  // Estilo de card padrão
   const cardStyles = {
     borderRadius: "1.25rem",
     bgcolor: "#fff",
@@ -118,8 +106,6 @@ export default function Landing() {
 
   return (
     <Box sx={{ bgcolor: "#F9FAFB", minHeight: "100vh" }}>
-      
-      {}
       <Paper
         elevation={0}
         component="header"
@@ -186,7 +172,7 @@ export default function Landing() {
         </Stack>
       </Paper>
 
-      {/* CARROSSEL HORIZONTAL COM CONTEÚDO DO PET */}
+      {/*  carrossel com conteudo dos animais */}
       <Container maxWidth="lg" sx={{ mt: { xs: 4, md: 6 }, mb: { xs: 4, md: 6 } }}>
         <Paper
           elevation={0}
@@ -244,7 +230,6 @@ export default function Landing() {
                     />
                   </Box>
 
-                  {}
                   <Box sx={{
                     flex: { xs: 1, md: 0.6 }, 
                     p: { xs: 3, md: 4 },
@@ -289,7 +274,6 @@ export default function Landing() {
                       {pet.descricao}
                     </Typography>
                     
-                    {}
                     <Typography
                         variant="h6"
                         sx={{
@@ -381,8 +365,7 @@ export default function Landing() {
         </Paper>
       </Container>
 
-
-      {/* HERO PRINCIPAL  */}
+      {/* Hero principal  */}
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <Grid container spacing={5} alignItems="center">
           <Grid item xs={12}>
@@ -451,8 +434,14 @@ export default function Landing() {
         </Grid>
       </Container>
 
+      <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
+        <AdoptionChart />
+      </Container>
+      <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
+        <MetricsCards />
+      </Container>
 
-      {/* ADOÇÃO RESPONSÁVEL*/}
+      {/* Adoção responsavel*/}
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <Paper
           elevation={0}
@@ -476,67 +465,77 @@ export default function Landing() {
         </Paper>
       </Container>
 
-      {/* SOBRE O ADOPTME */}
-      <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
-        <Grid container spacing={4} alignItems="stretch">
-          
-          <Grid item xs={12} md={7}>
-            <Typography variant="h5" sx={{ fontWeight: 600, color: "#1f2937", mb: 1.5 }}>
-              Sobre o AdoptMe
-            </Typography>
-            <Typography sx={{ color: "#475569", mb: 1 }}>
-              O AdoptMe é um sistema web de adoção de animais que centraliza, em
-              um único ambiente, o cadastro de adotantes e de doadores.
-            </Typography>
-            <Typography sx={{ color: "#475569", mb: 1 }}>
-              Ele utiliza uma lógica de recomendação simples (K-NN) para aproximar
-              o perfil do adotante ao animal mais adequado, considerando moradia,
-              presença de crianças, tempo disponível e estilo de vida.
-            </Typography>
-            <Typography sx={{ color: "#475569" }}>
-              É um projeto com foco social e acadêmico, desenvolvido em React no
-              frontend, Flask no backend e MySQL como banco de dados, com
-              autenticação via Google e filtros de busca.
-            </Typography>
-          </Grid>
+      {/* sobre */}
+      <Box
+        sx={{
+          maxWidth: "900px",
+          margin: "60px auto",
+          padding: "36px 48px",
+          background: "white",
+          borderRadius: "22px",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
+          textAlign: "left",
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+            color: "#1f2937",
+            mb: 2,
+            textAlign: "center",
+          }}
+        >
+          Sobre o AdoptMe
+        </Typography>
 
-          <Grid item xs={12} md={5}>
-            <Paper
-              elevation={0}
-              sx={{
-                ...cardStyles,
-                bgcolor: "#EEF2FF",
-                p: { xs: 2.5, md: 3 },
-                height: "100%"
-              }}
-            >
-              <Typography variant="h6" sx={{ fontWeight: 600, color: "#1f2937", mb: 1.5 }}>
-                Resumo rápido
-              </Typography>
-              <List dense sx={{ p: 0 }}>
-                {[
-                  "Sistema unificado para adotar e doar",
-                  "Recomendações por afinidade de perfil",
-                  "React + Flask + MySQL",
-                  "IA simples com KNN (scikit-learn)",
-                  "Autenticação pelo Google",
-                  "Interface responsiva",
-                ].map((text) => (
-                  <ListItem key={text} sx={{ p: 0, mb: 0.5 }}>
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <CheckCircleOutlineIcon sx={{ color: primaryColor, fontSize: "1.2rem" }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={text}
-                      primaryTypographyProps={{ color: "#475569", fontSize: '0.9rem' }}
-                    />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
+        <Typography
+          variant="body1"
+          sx={{
+            color: "#4b5563",
+            lineHeight: 1.65,
+            fontSize: "1.05rem",
+            maxWidth: "90%",
+            margin: "0 auto",
+          }}
+        >
+          🐾 O <strong>AdoptMe</strong> é um sistema web que conecta pessoas interessadas
+          em adoção responsável com animais disponíveis para um novo lar.
+        </Typography>
+
+        <Typography
+          variant="body1"
+          sx={{
+            color: "#4b5563",
+            lineHeight: 1.65,
+            fontSize: "1.05rem",
+            maxWidth: "90%",
+            margin: "18px auto 0",
+          }}
+        >
+          🤝 Em vez de usar um K fixo de forma literal, o AdoptMe transforma o perfil do
+          adotante e os atributos dos animais em vetores numéricos e usa uma medida
+          de <strong>similaridade vetorial ponderada</strong> (implementada com utilitários do
+          Scikit-Learn) para rankear os pets mais compatíveis. Essa abordagem permite
+          priorizar características importantes e gerar recomendações personalizadas.
+        </Typography>
+
+        <Typography
+          variant="body1"
+          sx={{
+            color: "#4b5563",
+            lineHeight: 1.65,
+            fontSize: "1.05rem",
+            maxWidth: "90%",
+            margin: "18px auto 0",
+          }}
+        >
+          💜 É um projeto com foco social e acadêmico, desenvolvido com
+          <strong> React, Flask e MySQL</strong>, com autenticação via Google,
+          trazendo modernidade e responsabilidade ao processo de adoção.
+        </Typography>
+      </Box>
+      <Footer />
     </Box>
   );
 }

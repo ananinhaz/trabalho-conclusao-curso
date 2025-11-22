@@ -3,7 +3,7 @@ const API_BASE = '/api';
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   const res = await fetch(API_BASE + path, {
     method,
-    credentials: 'include', 
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(headers || {}),
@@ -32,7 +32,7 @@ export function apiDel(path) {
   return apiFetch(path, { method: 'DELETE' });
 }
 
-// AUTH 
+// auth
 export const authApi = {
   me() {
     return apiGet('/auth/me');
@@ -55,7 +55,7 @@ export const authApi = {
   },
 };
 
-// PERFIL ADOTANTE 
+// perfil adotante
 export const perfilApi = {
   get() {
     return apiGet('/perfil_adotante');
@@ -65,9 +65,7 @@ export const perfilApi = {
   },
 };
 
-// ANIMAIS 
 export const animaisApi = {
-  // lista pública com filtros (usa apiGet 
   list(params = {}) {
     const qs = new URLSearchParams(
       Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
@@ -100,9 +98,19 @@ export const animaisApi = {
   remove(id) {
     return apiDel(`/animais/${id}`);
   },
+
+  // marcar/desmarcar adotado patch
+  adopt(id, { action = 'mark' } = {}) {
+    return apiFetch(`/animais/${id}/adopt`, { method: 'PATCH', body: { action } });
+  },
+
+  // métricas 
+  adoptionMetrics(days = 7) {
+    return apiGet(`/animais/metrics/adoptions?days=${days}`);
+  },
 };
 
-// RECOMENDAÇÕES
+// recomendações
 export const recApi = {
   list(n = 12) {
     return apiGet(`/recomendacoes?n=${n}`);

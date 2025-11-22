@@ -1,4 +1,3 @@
-// src/pages/ProfileEdit.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Container, Paper, Typography, TextField, Button, Stack } from "@mui/material";
@@ -33,8 +32,6 @@ export default function ProfileEdit() {
 
   async function handleSave(e) {
     e.preventDefault();
-    // Aqui você precisa implementar a rota backend pra atualizar usuário.
-    // Enquanto não existir, só volta.
     navigate("/perfil");
   }
 

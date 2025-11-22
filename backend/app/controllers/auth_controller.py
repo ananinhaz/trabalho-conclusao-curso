@@ -9,7 +9,7 @@ from ..extensions.oauth import oauth
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# CONFIG
+# config
 FRONT_DEFAULT = "http://127.0.0.1:5173/"
 GOOGLE_CALLBACK = "http://127.0.0.1:5000/auth/google/callback"
 
@@ -53,7 +53,7 @@ def _commit_and_redirect(url: str):
         {"Content-Type": "text/html; charset=utf-8"},
     )
 
-# CADASTRO / LOGIN NORMAL
+# cadastro/login
 @bp.post("/register")
 def register():
     data = request.get_json(silent=True) or {}
@@ -139,7 +139,7 @@ def me():
 
     return jsonify({"authenticated": True, "user": user})
 
-# LOGIN COM GOOGLE
+# login com o google
 @bp.get("/login/google")
 def login_google():
     """
@@ -228,7 +228,7 @@ def google_callback():
                 print("✅ login google: achou por email e vinculou ->", user_id)
                 return _commit_and_redirect(final_next)
 
-        # não achou, cria
+        # se não achar, cria
         cur.close()
         cur = conn.cursor()
         cur.execute(
