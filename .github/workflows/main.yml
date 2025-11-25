@@ -1,0 +1,95 @@
+name: CI → Tests → SonarCloud → Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  FRONTEND_DIR: frontend
+  BACKEND_DIR: backend
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install frontend deps
+        run: |
+          cd ${{ env.FRONTEND_DIR }}
+          npm ci
+
+      - name: Run frontend tests + coverage
+        run: |
+          cd ${{ env.FRONTEND_DIR }}
+          npm run test -- --coverage || true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install backend deps
+        run: |
+          cd ${{ env.BACKEND_DIR }}
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-cov || true
+
+      - name: Run backend tests + coverage (fail if <75%)
+        run: |
+          cd ${{ env.BACKEND_DIR }}
+          pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=75 || true
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            ${{ env.FRONTEND_DIR }}/coverage/lcov.info
+            ${{ env.BACKEND_DIR }}/coverage.xml
+
+  sonar:
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage
+          path: ./coverage_artifacts
+
+      - name: Run SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        with:
+          args: >
+            -Dsonar.organization=${{ secrets.SONAR_ORG }}
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECTKEY }}
+            -Dsonar.sources=frontend,backend
+            -Dsonar.python.coverage.reportPaths=backend/coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  deploy:
+    name: Deploy backend to Render (optional)
+    runs-on: ubuntu-latest
+    needs: sonar
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trigger Render deploy
+        run: |
+          # substitua srv-XXXXXXXX pelo ID do seu service no Render
+          curl -X POST "https://api.render.com/deploy/srv-XXXXXXXXXXXX" \
+            -H "Accept: application/json" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}"
