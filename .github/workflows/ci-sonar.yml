@@ -14,13 +14,13 @@ jobs:
   tests:
     runs-on: ubuntu-latest
 
-    # Inicia um container MySQL para os testes de backend
     services:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: test_db
+          MYSQL_ROOT_PASSWORD: ana123
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_DATABASE: adoptme
         ports:
           - 3306:3306
         options: >-
@@ -29,6 +29,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
+    # essas variáveis devem corresponder às que seu backend espera (conforme .env)
     env:
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
@@ -59,7 +60,6 @@ jobs:
         run: |
           cd ${{ env.FRONTEND_DIR }}
           npm run test:coverage
-        # se vitest produzir erro por versão, veja o passo "Show Node/npm versions" e me chama
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -80,7 +80,7 @@ jobs:
           sudo apt-get install -y default-mysql-client
           echo "Waiting for MySQL..."
           for i in {1..30}; do
-            if mysql -h 127.0.0.1 -u root -proot -e "SELECT 1" > /dev/null 2>&1; then
+            if mysql -h 127.0.0.1 -u "${{ env.DB_USER }}" -p"${{ env.DB_PASSWORD }}" -e "SELECT 1" > /dev/null 2>&1; then
               echo "MySQL is ready"; break
             fi
             echo "MySQL not ready yet... ($i)"
@@ -90,18 +90,16 @@ jobs:
 
       - name: (Optional) Create DB schema if present
         run: |
-          # Se você tem um schema.sql ou migrations no backend, importe/rode aqui.
-          # Exemplo: se tiver backend/schema.sql:
+          # Se você tem um arquivo de criação de schema (schema.sql) ou migrations, importe/rode aqui.
           if [ -f ${{ env.BACKEND_DIR }}/schema.sql ]; then
-            echo "Importing schema.sql into test_db"
-            mysql -h 127.0.0.1 -u root -proot test_db < ${{ env.BACKEND_DIR }}/schema.sql
+            echo "Importing schema.sql into adoptme"
+            mysql -h 127.0.0.1 -u "${{ env.DB_USER }}" -p"${{ env.DB_PASSWORD }}" ${{ env.DB_NAME }} < ${{ env.BACKEND_DIR }}/schema.sql
           fi
         shell: bash
 
       - name: Run backend tests + coverage (fail if <75%)
         run: |
           cd ${{ env.BACKEND_DIR }}
-          # garante que os testes leiam as variáveis DB_*; ajuste se necessário
           pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=75
         shell: bash
 
