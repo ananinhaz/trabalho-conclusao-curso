@@ -13,13 +13,42 @@ env:
 jobs:
   tests:
     runs-on: ubuntu-latest
+
+    # Inicia um container MySQL para os testes de backend
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ana123
+      DB_NAME: adoptme
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout sources
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Show Node/npm versions (debug)
+        run: |
+          node --version
+          npm --version
 
       - name: Install frontend deps
         run: |
@@ -30,6 +59,7 @@ jobs:
         run: |
           cd ${{ env.FRONTEND_DIR }}
           npm run test:coverage
+        # se vitest produzir erro por versão, veja o passo "Show Node/npm versions" e me chama
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -42,11 +72,38 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-cov
+        shell: bash
+
+      - name: Wait for MySQL to be ready
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y default-mysql-client
+          echo "Waiting for MySQL..."
+          for i in {1..30}; do
+            if mysql -h 127.0.0.1 -u root -proot -e "SELECT 1" > /dev/null 2>&1; then
+              echo "MySQL is ready"; break
+            fi
+            echo "MySQL not ready yet... ($i)"
+            sleep 2
+          done
+        shell: bash
+
+      - name: (Optional) Create DB schema if present
+        run: |
+          # Se você tem um schema.sql ou migrations no backend, importe/rode aqui.
+          # Exemplo: se tiver backend/schema.sql:
+          if [ -f ${{ env.BACKEND_DIR }}/schema.sql ]; then
+            echo "Importing schema.sql into test_db"
+            mysql -h 127.0.0.1 -u root -proot test_db < ${{ env.BACKEND_DIR }}/schema.sql
+          fi
+        shell: bash
 
       - name: Run backend tests + coverage (fail if <75%)
         run: |
           cd ${{ env.BACKEND_DIR }}
+          # garante que os testes leiam as variáveis DB_*; ajuste se necessário
           pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=75
+        shell: bash
 
       - name: Upload coverage artifacts
         uses: actions/upload-artifact@v4
