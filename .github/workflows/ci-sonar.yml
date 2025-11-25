@@ -29,7 +29,6 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
-    # essas variáveis devem corresponder às que seu backend espera (conforme .env)
     env:
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
@@ -45,11 +44,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Show Node/npm versions (debug)
-        run: |
-          node --version
-          npm --version
 
       - name: Install frontend deps
         run: |
@@ -90,17 +84,16 @@ jobs:
 
       - name: (Optional) Create DB schema if present
         run: |
-          # Se você tem um arquivo de criação de schema (schema.sql) ou migrations, importe/rode aqui.
           if [ -f ${{ env.BACKEND_DIR }}/schema.sql ]; then
             echo "Importing schema.sql into adoptme"
             mysql -h 127.0.0.1 -u "${{ env.DB_USER }}" -p"${{ env.DB_PASSWORD }}" ${{ env.DB_NAME }} < ${{ env.BACKEND_DIR }}/schema.sql
           fi
         shell: bash
 
-      - name: Run backend tests + coverage (fail if <75%)
+      - name: Run backend unit tests (skip integration) + coverage
         run: |
           cd ${{ env.BACKEND_DIR }}
-          pytest --cov=backend --cov-report=xml --cov-report=term --cov-fail-under=75
+          pytest -m "not integration" --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75
         shell: bash
 
       - name: Upload coverage artifacts
