@@ -27,10 +27,12 @@ export default function Login() {
   const params = new URLSearchParams(location.search);
   const next = params.get("next") || "/animais";
 
-  async function handleSubmit(e) {
+    async function handleSubmit(e) {
     e.preventDefault();
-    const email = e.target.email.value.trim();
-    const senha = e.target.senha.value.trim();
+
+    const formData = new FormData(e.currentTarget);
+    const email = (formData.get("email") || "").toString().trim();
+    const senha = (formData.get("senha") || "").toString().trim();
 
     if (!email || !senha) {
       alert("Preencha e-mail e senha.");

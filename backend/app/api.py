@@ -230,23 +230,46 @@ def list_animais():
 
 @bp_api.post("/animais")
 def create_animal():
+    """
+    Versão defensiva de create_animal: não chama .strip() em valores que podem ser int,
+    garantindo que enviar idade como número não quebre os testes.
+    """
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
 
     data = request.get_json(silent=True) or {}
-    nome = (data.get("nome") or "").strip()
-    especie = (data.get("especie") or "").strip()
-    raca = (data.get("raca") or None)
-    idade = (data.get("idade") or "").strip() 
-    porte = (data.get("porte") or None)
-    descricao = (data.get("descricao") or "").strip()
-    cidade = (data.get("cidade") or "").strip()
-    photo_url = (data.get("photo_url") or "").strip()
-    donor_name = (data.get("donor_name") or "").strip()
-    donor_whatsapp = (data.get("donor_whatsapp") or "").strip()
-    energia = (data.get("energia") or None)
-    bom_com_criancas = (data.get("bom_com_criancas") or 0)
+
+    def _safe_strip(val):
+        if val is None:
+            return None
+        if isinstance(val, str):
+            return val.strip()
+        # converte outros tipos (int/float) para str e strip seguro
+        try:
+            return str(val).strip()
+        except Exception:
+            return None
+
+    nome = _safe_strip(data.get("nome")) or ""
+    especie = _safe_strip(data.get("especie")) or ""
+    raca = _safe_strip(data.get("raca"))
+    raw_idade = data.get("idade")
+    if raw_idade is None or raw_idade == "":
+        idade = None
+    else:
+        idade = _safe_strip(raw_idade)
+    porte = _safe_strip(data.get("porte"))
+    descricao = _safe_strip(data.get("descricao")) or ""
+    cidade = _safe_strip(data.get("cidade")) or ""
+    photo_url = _safe_strip(data.get("photo_url"))
+    donor_name = _safe_strip(data.get("donor_name"))
+    donor_whatsapp = _safe_strip(data.get("donor_whatsapp"))
+    energia = _safe_strip(data.get("energia"))
+    try:
+        bom_com_criancas = int(data.get("bom_com_criancas") or 0)
+    except Exception:
+        bom_com_criancas = 0
 
     if not (nome and especie and descricao and cidade):
         return _json_error("Dados obrigatórios ausentes")
@@ -305,7 +328,7 @@ def update_animal(aid: int):
     nome = (data.get("nome") or "").strip()
     especie = (data.get("especie") or "").strip()
     raca = (data.get("raca") or None)
-    idade = (data.get("idade") or "").strip()
+    idade = data.get("idade")
     porte = (data.get("porte") or None)
     descricao = (data.get("descricao") or "").strip()
     cidade = (data.get("cidade") or "").strip()
@@ -452,7 +475,7 @@ def recomendacoes():
             cur.execute(
                 """
                 SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
+                       cidade, photo_url, donor_name, donor_whatsapp, doador_id,
                        criado_em AS created_at,
                        energia, bom_com_criancas, adotado_em
                   FROM animais

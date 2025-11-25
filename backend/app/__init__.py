@@ -3,6 +3,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Importação do Blueprint de saúde
+from .health import health_bp
+
 def create_app():
     load_dotenv()
     app = Flask(__name__)
@@ -46,9 +49,13 @@ def create_app():
     from .api import register_blueprints
     register_blueprints(app)
 
-    @app.get("/health")
-    def health():
-        return jsonify(ok=True)
+    # NOVO: Registro do Blueprint de saúde
+    # Isso adiciona as rotas /db-health e /tables
+    app.register_blueprint(health_bp) 
+
+    # REMOVIDO: Rota /health simples. 
+    # Ela estava em conflito com o seu app/health.py e impedindo a cobertura.
+    # A rota /db-health agora é usada para checar a saúde do DB.
 
     @app.get("/")
     def index():
