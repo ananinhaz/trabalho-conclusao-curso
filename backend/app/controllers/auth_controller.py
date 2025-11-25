@@ -66,21 +66,25 @@ def register():
     if not (nome and email and senha):
         return jsonify(ok=False, error="Dados obrigatórios"), 400
 
-    with db() as conn:
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
-        if cur.fetchone():
+    try:
+        with db() as conn:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+            if cur.fetchone():
+                cur.close()
+                return jsonify(ok=False, error="Email já cadastrado"), 400
             cur.close()
-            return jsonify(ok=False, error="Email já cadastrado"), 400
-        cur.close()
 
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
-            (nome, email, generate_password_hash(senha)),
-        )
-        uid = cur.lastrowid
-        cur.close()
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
+                (nome, email, generate_password_hash(senha)),
+            )
+            uid = cur.lastrowid
+            cur.close()
+    except Exception as exc:
+        print("Erro no DB durante register:", exc)
+        return jsonify(ok=False, error="Erro interno"), 500
 
     session["user_id"] = uid
     session.modified = True
@@ -89,15 +93,24 @@ def register():
 
 @bp.post("/login")
 def login():
+    # defensivo: não confiar no payload; evita 500 quando campos ausentes
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     senha = data.get("senha") or ""
 
-    with db() as conn:
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
-        row = cur.fetchone()
-        cur.close()
+    # -> proteção explícita: se faltar email ou senha, devolve 401 sem tocar no DB
+    if not (email and senha):
+        return jsonify(ok=False, error="Credenciais inválidas"), 401
+
+    try:
+        with db() as conn:
+            cur = conn.cursor(dictionary=True)
+            cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
+            row = cur.fetchone()
+            cur.close()
+    except Exception as exc:
+        print("Erro no DB durante login:", exc)
+        return jsonify(ok=False, error="Erro interno"), 500
 
     if not row or not check_password_hash(row["password_hash"], senha):
         return jsonify(ok=False, error="Credenciais inválidas"), 401
@@ -120,6 +133,7 @@ def me():
     Retorna o usuário logado com os dados básicos (id, nome, email, avatar_url).
     Se não estiver logado, devolve 401 com authenticated: False.
     """
+    # útil para debugging em CI: ver o que tem na sessão
     print("SESSION NO /me:", dict(session))
 
     # 🔥 Ajuste para passar nos testes unitários:
@@ -133,15 +147,21 @@ def me():
         return jsonify({"authenticated": False}), 401
 
     # Busca o usuário no banco
-    with db() as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
-                (int(user_id),),
-            )
-            user = cur.fetchone()
+    try:
+        with db() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(
+                    "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
+                    (int(user_id),),
+                )
+                user = cur.fetchone()
+    except Exception as exc:
+        print("Erro no DB durante /me:", exc)
+        session.clear()
+        return jsonify({"authenticated": False}), 401
 
     if not user:
+        # sessão com user_id inválido limpa sessão por segurança
         session.clear()
         return jsonify({"authenticated": False}), 401
 
@@ -205,47 +225,51 @@ def google_callback():
     )
 
     # upsert do usuário
-    with db() as conn:
-        cur = conn.cursor(dictionary=True)
+    try:
+        with db() as conn:
+            cur = conn.cursor(dictionary=True)
 
-        # procura por google_sub
-        cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
-        u = cur.fetchone()
-        if u:
-            user_id = int(u["id"])
-            session["user_id"] = user_id
-            session.modified = True
-            cur.close()
-            print("✅ login google: achou por google_sub ->", user_id)
-            return _commit_and_redirect(final_next)
-
-        # procura por email existente
-        if email:
-            cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+            # procura por google_sub
+            cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
             u = cur.fetchone()
             if u:
                 user_id = int(u["id"])
-                cur.close()
-                cur = conn.cursor()
-                cur.execute(
-                    "UPDATE usuarios SET google_sub=%s, avatar_url=%s WHERE id=%s",
-                    (sub, avatar, user_id),
-                )
-                cur.close()
                 session["user_id"] = user_id
                 session.modified = True
-                print("✅ login google: achou por email e vinculou ->", user_id)
+                cur.close()
+                print("✅ login google: achou por google_sub ->", user_id)
                 return _commit_and_redirect(final_next)
 
-        # cria novo
-        cur.close()
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
-            (nome, email, sub, avatar),
-        )
-        new_id = cur.lastrowid
-        cur.close()
+            # procura por email existente
+            if email:
+                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                u = cur.fetchone()
+                if u:
+                    user_id = int(u["id"])
+                    cur.close()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "UPDATE usuarios SET google_sub=%s, avatar_url=%s WHERE id=%s",
+                        (sub, avatar, user_id),
+                    )
+                    cur.close()
+                    session["user_id"] = user_id
+                    session.modified = True
+                    print("✅ login google: achou por email e vinculou ->", user_id)
+                    return _commit_and_redirect(final_next)
+
+            # cria novo
+            cur.close()
+            cur = conn.cursor()
+            cur.execute(
+                "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
+                (nome, email, sub, avatar),
+            )
+            new_id = cur.lastrowid
+            cur.close()
+    except Exception as exc:
+        print("Erro no DB durante google_callback:", exc)
+        return jsonify(ok=False, error="Erro interno"), 500
 
     session["user_id"] = int(new_id)
     session.modified = True
