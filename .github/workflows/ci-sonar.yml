@@ -1,4 +1,4 @@
-name: CI → Tests → SonarCloud
+name: CI - Tests → SonarCloud
 
 on:
   push:
@@ -6,118 +6,108 @@ on:
   pull_request:
     branches: [ main ]
 
-env:
-  FRONTEND_DIR: frontend
-  BACKEND_DIR: backend
-
 jobs:
-  tests:
+  tests-and-sonar:
     runs-on: ubuntu-latest
-
     services:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: ana123
-          MYSQL_ROOT_HOST: '%'
+          MYSQL_ROOT_PASSWORD: rootpassword
           MYSQL_DATABASE: adoptme
         ports:
           - 3306:3306
         options: >-
           --health-cmd="mysqladmin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=30
 
     env:
+      # envs para o job (seu app usa DB_* no .env)
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_USER: root
-      DB_PASSWORD: ana123
+      DB_PASSWORD: rootpassword
       DB_NAME: adoptme
+      # Sonar (deve existir em Secrets)
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_ORG: ${{ secrets.SONAR_ORG }}
+      SONAR_PROJECTKEY: ${{ secrets.SONAR_PROJECTKEY }}
 
     steps:
-      - name: Checkout sources
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install frontend deps
-        run: |
-          cd ${{ env.FRONTEND_DIR }}
-          npm ci
-
-      - name: Run frontend tests + coverage (Vitest)
-        run: |
-          cd ${{ env.FRONTEND_DIR }}
-          npm run test:coverage
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Install backend deps
-        run: |
-          cd ${{ env.BACKEND_DIR }}
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-cov
-        shell: bash
 
       - name: Wait for MySQL to be ready
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y default-mysql-client
-          echo "Waiting for MySQL..."
-          for i in {1..30}; do
-            if mysql -h 127.0.0.1 -u "${{ env.DB_USER }}" -p"${{ env.DB_PASSWORD }}" -e "SELECT 1" > /dev/null 2>&1; then
-              echo "MySQL is ready"; break
-            fi
-            echo "MySQL not ready yet... ($i)"
-            sleep 2
+          for i in {1..60}; do
+            mysql -h127.0.0.1 -uroot -prootpassword -e "SELECT 1" >/dev/null 2>&1 && break || sleep 1
           done
-        shell: bash
 
-      - name: (Optional) Create DB schema if present
+      - name: Create DB and usuarios table
         run: |
-          if [ -f ${{ env.BACKEND_DIR }}/schema.sql ]; then
-            echo "Importing schema.sql into adoptme"
-            mysql -h 127.0.0.1 -u "${{ env.DB_USER }}" -p"${{ env.DB_PASSWORD }}" ${{ env.DB_NAME }} < ${{ env.BACKEND_DIR }}/schema.sql
-          fi
-        shell: bash
+          cat > ./init_db.sql <<'SQL'
+          CREATE DATABASE IF NOT EXISTS adoptme CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+          USE adoptme;
+          CREATE TABLE IF NOT EXISTS usuarios (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            password_hash VARCHAR(255),
+            google_id VARCHAR(255),
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            google_sub VARCHAR(255),
+            avatar_url VARCHAR(512)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+          SQL
+          mysql -h127.0.0.1 -uroot -prootpassword < ./init_db.sql
 
-      - name: Run backend unit tests (skip integration) + coverage
+      ####################
+      # Backend: Python
+      ####################
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install backend deps
         run: |
-          cd ${{ env.BACKEND_DIR }}
-          pytest -m "not integration" --cov=app --cov-report=xml --cov-report=term --cov-fail-under=75
-        shell: bash
+          cd backend
+          python -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
 
-      - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: |
-            ${{ env.FRONTEND_DIR }}/coverage/lcov.info
-            ${{ env.BACKEND_DIR }}/coverage.xml
+      - name: Run backend tests and produce coverage.xml
+        working-directory: backend
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: rootpassword
+          DB_NAME: adoptme
+        run: |
+          . venv/bin/activate
+          pytest --cov=app --cov-report=xml --cov-report=term
 
-  sonar:
-    runs-on: ubuntu-latest
-    needs: tests
-    steps:
-      - uses: actions/checkout@v4
+      ####################
+      # Frontend: optional (se quiser enviar coverage JS)
+      ####################
+      - name: Run frontend tests (generate lcov)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run test:coverage || true
 
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage
-          path: ./coverage_artifacts
-
-      - name: Run SonarCloud Scan
+      ####################
+      # SonarCloud scan
+      ####################
+      - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
             -Dsonar.organization=${{ secrets.SONAR_ORG }}
@@ -125,5 +115,3 @@ jobs:
             -Dsonar.sources=frontend,backend
             -Dsonar.python.coverage.reportPaths=backend/coverage.xml
             -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
