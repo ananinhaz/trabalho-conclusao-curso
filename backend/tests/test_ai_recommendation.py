@@ -1,12 +1,15 @@
+﻿import pytest
+pytestmark = pytest.mark.integration
+
 import pytest
 from app.extensions.db import db
 
 def test_recommendation_flow(client):
     """
-    Testa o fluxo de recomendação (IA) para garantir cobertura nas funções
+    Testa o fluxo de recomendaÃ§Ã£o (IA) para garantir cobertura nas funÃ§Ãµes
     _build_user_vector, _build_animal_vector e na rota /recomendacoes.
     """
-    #  Cria um usuário e perfil para ter base de comparação
+    #  Cria um usuÃ¡rio e perfil para ter base de comparaÃ§Ã£o
     email = "ia_test_user@example.com"
     client.post("/auth/register", json={
         "nome": "IA User", "email": email, "senha": "123"
@@ -19,7 +22,7 @@ def test_recommendation_flow(client):
             cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
             uid = cur.fetchone()['id']
             
-    # Cria Perfil do Adotante (Mora em Casa, Tem Crianças)
+    # Cria Perfil do Adotante (Mora em Casa, Tem CrianÃ§as)
     with client.session_transaction() as sess:
         sess["user_id"] = uid
         
@@ -44,7 +47,7 @@ def test_recommendation_flow(client):
         "porte": "pequeno", "descricao": "Calmo", "cidade": "SP"
     })
 
-    # Chama a rota de recomendação
+    # Chama a rota de recomendaÃ§Ã£o
     resp = client.get("/recomendacoes?n=5")
     assert resp.status_code == 200
     data = resp.get_json()

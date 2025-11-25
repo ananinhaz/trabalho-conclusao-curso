@@ -1,4 +1,7 @@
-﻿from flask import jsonify, request
+﻿import pytest
+pytestmark = pytest.mark.integration
+
+from flask import jsonify, request
 
 def _clear_before_request(app):
     try:
@@ -44,3 +47,4 @@ def test_post_perfil_adotante(client):
     assert r.status_code in (200, 201)
     js = r.get_json()
     assert js.get("saved", {}).get("nome") == "Novo"
+

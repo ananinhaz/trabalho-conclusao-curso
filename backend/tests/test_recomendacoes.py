@@ -1,4 +1,7 @@
-﻿from flask import jsonify
+﻿import pytest
+pytestmark = pytest.mark.integration
+
+from flask import jsonify
 
 def _clear_before_request(app):
     try:
@@ -29,3 +32,4 @@ def test_get_recomendacoes(client):
     assert r.status_code == 200
     js = r.get_json()
     assert isinstance(js, list) and js[0].get("nome") == "Rex"
+

@@ -1,4 +1,7 @@
-﻿import importlib
+﻿import pytest
+pytestmark = pytest.mark.integration
+
+import importlib
 from flask import jsonify, request
 
 def test_recomendacoes_controller_retorna_items_mockados(client):
@@ -32,3 +35,4 @@ def test_recomendacoes_controller_retorna_items_mockados(client):
 
     assert isinstance(items, list), f"esperava lista, veio: {type(items)} body={resp.get_data(as_text=True)}"
     assert any(i.get("nome") == "X" for i in items), f"esperava item com nome 'X' em items, body={resp.get_data(as_text=True)}"
+

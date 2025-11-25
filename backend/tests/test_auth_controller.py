@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 from unittest.mock import patch, MagicMock
 from werkzeug.wrappers import Response # Para inspecionar o retorno de _commit_and_redirect
 
@@ -10,7 +10,7 @@ OAUTH_PATH = 'app.controllers.auth_controller.oauth'
 
 
 def setup_db_mock(mock_db, fetchone_result=None, lastrowid=1):
-    """Configuração robusta para o mock de banco de dados."""
+    """ConfiguraÃ§Ã£o robusta para o mock de banco de dados."""
     mock_conn = MagicMock()
     mock_cur = MagicMock()
     
@@ -38,11 +38,11 @@ def setup_db_mock(mock_db, fetchone_result=None, lastrowid=1):
 @patch(DB_CONTEXT_PATH)
 @patch(GET_USER_BY_ID_PATH)
 def test_register_success(mock_get_user_by_id, mock_db, mock_generate_hash, client):
-    """Testa o registro de um novo usuário."""
+    """Testa o registro de um novo usuÃ¡rio."""
     mock_generate_hash.return_value = "hashed_password"
     mock_conn, mock_cur = setup_db_mock(mock_db)
 
-    # Check email: None (Usuário não existe)
+    # Check email: None (UsuÃ¡rio nÃ£o existe)
     mock_cur.fetchone.side_effect = [None, None]
     mock_cur.lastrowid = 99
     
@@ -55,13 +55,13 @@ def test_register_success(mock_get_user_by_id, mock_db, mock_generate_hash, clie
     data = response.get_json()
     assert data.get('ok') is True
 
-    # Verifica que o retorno contém o usuário criado 
+    # Verifica que o retorno contÃ©m o usuÃ¡rio criado 
     assert data.get("user") and data["user"]["id"] == 99
 
 
 @patch(DB_CONTEXT_PATH)
 def test_register_user_exists(mock_db, client):
-    """Testa o registro quando o email já existe."""
+    """Testa o registro quando o email jÃ¡ existe."""
     setup_db_mock(mock_db, fetchone_result={"id": 1})
     
     payload = {"nome": "Existing", "email": "test@mock.com", "senha": "123"}
@@ -84,13 +84,13 @@ def test_login_success(mock_get_user_by_id, mock_db, mock_check_hash, client):
     assert response.status_code == 200
     assert response.get_json().get('ok') is True
 
-    # Verifica que o JSON devolve o usuário correto
+    # Verifica que o JSON devolve o usuÃ¡rio correto
     assert response.get_json().get("user") and response.get_json()["user"]["id"] == 1
 
 
 @patch(DB_CONTEXT_PATH)
 def test_login_user_not_found(mock_db, client):
-    """Testa o login quando o usuário não é encontrado no DB."""
+    """Testa o login quando o usuÃ¡rio nÃ£o Ã© encontrado no DB."""
     setup_db_mock(mock_db, fetchone_result=None)
     payload = {"email": "not@found.com", "senha": "password123"}
     response = client.post("/auth/login", json=payload)
@@ -117,11 +117,11 @@ def test_login_missing_fields(client):
 
 @patch(DB_CONTEXT_PATH)
 def test_me_authenticated(mock_db, client):
-    """Testa a rota /me quando há um usuário logado."""
+    """Testa a rota /me quando hÃ¡ um usuÃ¡rio logado."""
     mock_user_data = {"id": 1, "nome": "Logged User", "email": "log@user.com", "avatar_url": None}
     setup_db_mock(mock_db, fetchone_result=mock_user_data)
     
-    # Injeta a sessão manualmente
+    # Injeta a sessÃ£o manualmente
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         
@@ -135,14 +135,14 @@ def test_me_authenticated(mock_db, client):
 
 @patch(DB_CONTEXT_PATH)
 def test_me_unauthenticated(mock_db, client):
-    """Testa a rota /me quando nenhum usuário está logado."""
+    """Testa a rota /me quando nenhum usuÃ¡rio estÃ¡ logado."""
     setup_db_mock(mock_db, fetchone_result=None)
     response = client.get("/auth/me")
     assert response.status_code == 401
 
 
 def test_logout_success(client):
-    """Testa o logout e a limpeza da sessão."""
+    """Testa o logout e a limpeza da sessÃ£o."""
     with client.session_transaction() as sess:
         sess['user_id'] = 1
         
@@ -153,11 +153,11 @@ def test_logout_success(client):
         assert 'user_id' not in sess
 
 
-# Testes de Funções Auxiliares 
+# Testes de FunÃ§Ãµes Auxiliares 
 
 @patch(DB_CONTEXT_PATH)
 def test_get_user_by_id(mock_db, client):
-    """Testa a função interna _get_user_by_id."""
+    """Testa a funcao interna _get_user_by_id."""
     from app.controllers.auth_controller import _get_user_by_id
     
     real_dict = {"id": 1, "nome": "Test", "email": "a@a.com", "avatar_url": None}
@@ -169,7 +169,7 @@ def test_get_user_by_id(mock_db, client):
 
 @patch(DB_CONTEXT_PATH)
 def test_get_user_by_id_not_found(mock_db, client):
-    """Testa _get_user_by_id quando o usuário não existe."""
+    """Testa _get_user_by_id quando o usuario nao existe."""
     from app.controllers.auth_controller import _get_user_by_id
     setup_db_mock(mock_db, fetchone_result=None)
     result = _get_user_by_id(999)
@@ -179,7 +179,7 @@ def test_get_user_by_id_not_found(mock_db, client):
 @patch(DB_CONTEXT_PATH)
 def test_commit_and_redirect(mock_db, client):
     """
-    Testa a função auxiliar de redirecionamento. 
+    Testa a funcao auxiliar de redirecionamento. 
     CORRIGIDO: Agora espera status 200 e a estrutura de tupla (body, status, headers)
     """
     from app.controllers.auth_controller import _commit_and_redirect
@@ -211,11 +211,11 @@ def test_login_google_redirect(mock_oauth, client):
 
 
 @patch(DB_CONTEXT_PATH)
-@patch('app.controllers.auth_controller.requests.get') # Mock para a requisição de userinfo
+@patch('app.controllers.auth_controller.requests.get') # Mock para a requisiÃ§Ã£o de userinfo
 @patch(OAUTH_PATH)
 def test_google_callback_new_user(mock_oauth, mock_requests_get, mock_db, client):
     """
-    Testa o callback do Google para um novo usuário.
+    Testa o callback do Google para um novo usuÃ¡rio.
     Rota: /auth/google/callback
     """
     
@@ -224,7 +224,7 @@ def test_google_callback_new_user(mock_oauth, mock_requests_get, mock_db, client
         'access_token': 'access_123',
     }
     
-    # Mock da requisição requests.get (userinfo)
+    # Mock da requisicao requests.get (userinfo)
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {
@@ -250,7 +250,7 @@ def test_google_callback_new_user(mock_oauth, mock_requests_get, mock_db, client
 @patch('app.controllers.auth_controller.requests.get') 
 @patch(OAUTH_PATH)
 def test_google_callback_existing_user(mock_oauth, mock_requests_get, mock_db, client):
-    """Testa o callback do Google para um usuário já existente (busca por email)."""
+    """Testa o callback do Google para um usuÃ¡rio jÃ¡ existente (busca por email)."""
     
     mock_oauth.google.safe_authorize_access_token.return_value = {'access_token': 'access_123'}
     
@@ -281,9 +281,11 @@ def test_google_callback_existing_user(mock_oauth, mock_requests_get, mock_db, c
 @patch('app.controllers.auth_controller.requests.get')
 @patch(OAUTH_PATH)
 def test_google_callback_token_fail(mock_oauth, mock_requests_get, mock_db, client):
-    """Testa falha na obtenção do token Google (simula token sem access_token)."""
+    """Testa falha na obtencao do token Google (simula token sem access_token)."""
     mock_oauth.google.safe_authorize_access_token.return_value = {}
     response = client.get("/auth/google/callback")
     
     assert response.status_code == 400
     assert "Google não retornou access_token" in response.get_json().get('error')
+
+

@@ -1,4 +1,7 @@
-﻿from flask import jsonify, request
+﻿import pytest
+pytestmark = pytest.mark.integration
+
+from flask import jsonify, request
 
 def _clear_before_request(app):
     try:
@@ -59,3 +62,4 @@ def test_get_me(client):
     assert r.status_code == 200
     js = r.get_json()
     assert js.get("user", {}).get("nome") == "Fake User"
+

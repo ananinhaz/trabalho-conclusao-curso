@@ -69,3 +69,4 @@ def test_tables_endpoint_success(client):
     data = resp.get_json()
     assert "tabelas" in data
     assert isinstance(data["tabelas"], list)
+

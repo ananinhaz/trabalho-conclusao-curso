@@ -14,7 +14,7 @@ def create_app():
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=False,
         SESSION_PERMANENT=False,
-        SESSION_COOKIE_DOMAIN="127.0.0.1",
+        # SESSION_COOKIE_DOMAIN removed to avoid test client cookie/domain issues
     )
     CORS(
         app,
@@ -49,16 +49,14 @@ def create_app():
     from .api import register_blueprints
     register_blueprints(app)
 
-    # NOVO: Registro do Blueprint de saúde
-    # Isso adiciona as rotas /db-health e /tables
-    app.register_blueprint(health_bp) 
-
-    # REMOVIDO: Rota /health simples. 
-    # Ela estava em conflito com o seu app/health.py e impedindo a cobertura.
-    # A rota /db-health agora é usada para checar a saúde do DB.
+    # Registro do Blueprint de saúde
+    app.register_blueprint(health_bp)
 
     @app.get("/")
     def index():
         return "API AdoptMe OK"
 
     return app
+
+# export a aplicação criada — necessário para pytest / fixtures e para imports diretos
+app = create_app()

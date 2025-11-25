@@ -1,4 +1,7 @@
-﻿
+﻿import pytest
+pytestmark = pytest.mark.integration
+
+
 def test_criar_e_listar_animal(client, monkeypatch):
     novo = {
     "nome": "Bolt",
@@ -29,3 +32,4 @@ def test_criar_e_listar_animal(client, monkeypatch):
     lista = client.get("/animais").get_json()
     items = lista["items"] if isinstance(lista, dict) and "items" in lista else lista
     assert any(a.get("nome") == "Bolt" for a in items), f"esperava 'Bolt' em items, body={lista}"
+

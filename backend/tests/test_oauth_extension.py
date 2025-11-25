@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 import requests
 from unittest.mock import patch, MagicMock
 from flask import Flask
@@ -7,7 +7,7 @@ from app.extensions.oauth import init_oauth, oauth
 
 @pytest.fixture
 def app_oauth():
-    """Cria uma app Flask básica e inicializa o OAuth."""
+    """Cria uma app Flask bÃ¡sica e inicializa o OAuth."""
     app = Flask(__name__)
     app.config['GOOGLE_CLIENT_ID'] = 'fake-id'
     app.config['GOOGLE_CLIENT_SECRET'] = 'fake-secret'
@@ -22,10 +22,10 @@ def test_init_oauth_registers_google(app_oauth):
 
 def test_safe_token_standard_flow(app_oauth):
     """
-    Cenário 1: O authorize_access_token funciona normalmente.
-    Não deve entrar no bloco except MismatchingStateError.
+    CenÃ¡rio 1: O authorize_access_token funciona normalmente.
+    NÃ£o deve entrar no bloco except MismatchingStateError.
     """
-    # Mocka a função original do authlib
+    # Mocka a funÃ§Ã£o original do authlib
     with patch.object(oauth.google, 'authorize_access_token') as mock_auth:
         expected_token = {'access_token': 'valid_token'}
         mock_auth.return_value = expected_token
@@ -37,14 +37,14 @@ def test_safe_token_standard_flow(app_oauth):
 
 def test_safe_token_fallback_success(app_oauth):
     """
-    Cenário 2: Ocorre MismatchingStateError, temos o 'code' na URL,
-    e a requisição manual POST retorna 200 OK.
+    CenÃ¡rio 2: Ocorre MismatchingStateError, temos o 'code' na URL,
+    e a requisiÃ§Ã£o manual POST retorna 200 OK.
     """
     with patch.object(oauth.google, 'authorize_access_token') as mock_auth:
-        # Força o erro inicial
+        # ForÃ§a o erro inicial
         mock_auth.side_effect = MismatchingStateError()
         
-        # Simula o contexto de requisição com o parâmetro 'code'
+        # Simula o contexto de requisiÃ§Ã£o com o parÃ¢metro 'code'
         with app_oauth.test_request_context('/callback?code=my_auth_code'):
             
             # Mocka o requests.post para simular a resposta do Google
@@ -54,7 +54,7 @@ def test_safe_token_fallback_success(app_oauth):
                 mock_resp.json.return_value = {'access_token': 'manual_fallback_token'}
                 mock_post.return_value = mock_resp
                 
-                # Executa a função
+                # Executa a funÃ§Ã£o
                 token = oauth.google.safe_authorize_access_token()
                 
                 assert token['access_token'] == 'manual_fallback_token'
@@ -66,8 +66,8 @@ def test_safe_token_fallback_success(app_oauth):
 
 def test_safe_token_fallback_no_code(app_oauth):
     """
-    Cenário 3: Ocorre MismatchingStateError, mas NÃO temos 'code' na URL.
-    Deve relançar a exceção original.
+    CenÃ¡rio 3: Ocorre MismatchingStateError, mas NÃƒO temos 'code' na URL.
+    Deve relanÃ§ar a exceÃ§Ã£o original.
     """
     with patch.object(oauth.google, 'authorize_access_token') as mock_auth:
         mock_auth.side_effect = MismatchingStateError()
@@ -78,7 +78,7 @@ def test_safe_token_fallback_no_code(app_oauth):
 
 def test_safe_token_fallback_request_fail(app_oauth):
     """
-    Cenário 4: Ocorre MismatchingStateError, temos 'code',
+    CenÃ¡rio 4: Ocorre MismatchingStateError, temos 'code',
     mas o POST manual retorna erro (ex: 400).
     """
     with patch.object(oauth.google, 'authorize_access_token') as mock_auth:
@@ -94,3 +94,4 @@ def test_safe_token_fallback_request_fail(app_oauth):
                 
                 with pytest.raises(requests.exceptions.HTTPError):
                     oauth.google.safe_authorize_access_token()
+

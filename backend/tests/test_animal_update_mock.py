@@ -1,4 +1,4 @@
-import pytest
+﻿import pytest
 import random
 from unittest.mock import patch
 from app.extensions.db import db
@@ -10,13 +10,13 @@ AUTH_PATH = 'app.api._require_auth'
 def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
     """
     Testa o ciclo completo: Criar -> Editar -> Deletar Animal,
-    usando Mock para forçar a autenticação e contornar o 401.
+    usando Mock para forÃ§ar a autenticaÃ§Ã£o e contornar o 401.
     
-    A correção para o erro 500 (IntegrityError: Column 'idade' cannot be null)
-    foi incluir o campo 'idade' no payload de criação.
+    A correÃ§Ã£o para o erro 500 (IntegrityError: Column 'idade' cannot be null)
+    foi incluir o campo 'idade' no payload de criaÃ§Ã£o.
     """
 
-    # Cria Usuário Novo e Limpo
+    # Cria UsuÃ¡rio Novo e Limpo
     rand_int = random.randint(10000, 99999)
     email = f"crud_mock_{rand_int}@test.com"
     senha = "123"
@@ -25,7 +25,7 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
     reg = client.post("/auth/register", json={
         "nome": "Dono Mock", "email": email, "senha": senha
     })
-    assert reg.status_code in (200, 201), "Erro no registro do usuário mock"
+    assert reg.status_code in (200, 201), "Erro no registro do usuÃ¡rio mock"
 
     # Pega o ID Real no Banco
     uid = None
@@ -34,7 +34,7 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
             cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
             row = cur.fetchone()
             if row: uid = row['id']
-    assert uid is not None, "Usuário registrado não encontrado no banco."
+    assert uid is not None, "UsuÃ¡rio registrado nÃ£o encontrado no banco."
 
     mock_require_auth.return_value = uid
 
@@ -80,3 +80,4 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
 
     # Limpa o mock
     mock_require_auth.return_value = None
+

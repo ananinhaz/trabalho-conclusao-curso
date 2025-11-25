@@ -1,12 +1,15 @@
+﻿import pytest
+pytestmark = pytest.mark.integration
+
 import json
 import types
 import pytest
 import importlib
 
-# Helpers fakes para substituir a conexão / cursor do DB
+# Helpers fakes para substituir a conexÃ£o / cursor do DB
 class FakeCursor:
     def __init__(self, rows=None, one=None):
-        # rows será retornado por fetchall; one por fetchone
+        # rows serÃ¡ retornado por fetchall; one por fetchone
         self._rows = rows or []
         self._one = one
         self.lastrowid = 42
@@ -21,13 +24,13 @@ class FakeCursor:
         return self._rows
 
     def fetchone(self):
-        # se _one está definido, devolve; senão devolve primeira das rows
+        # se _one estÃ¡ definido, devolve; senÃ£o devolve primeira das rows
         if self._one is not None:
             return self._one
         return self._rows[0] if self._rows else None
 
     def close(self):
-        # presente porque o código chama cur.close()
+        # presente porque o cÃ³digo chama cur.close()
         return None
 
     # context manager support
@@ -67,9 +70,9 @@ def test_get_animais_returns_list(client, monkeypatch):
         {"id": 1, "nome": "Alpha", "especie": "Cachorro", "idade": 3},
         {"id": 2, "nome": "Beta",  "especie": "Gato",      "idade": 2},
     ]
-    # monkeypatch get_conn na extensão que o app usa
+    # monkeypatch get_conn na extensÃ£o que o app usa
     monkeypatch.setattr("app.extensions.db.get_conn", fake_conn_factory(rows=fake_rows), raising=False)
-    # Também patch no caminho alternativo (por segurança
+    # TambÃ©m patch no caminho alternativo (por seguranÃ§a
     monkeypatch.setattr("app.extensions.db.db", fake_conn_factory(rows=fake_rows), raising=False)
 
     resp = client.get("/animais")
@@ -90,7 +93,7 @@ def test_create_animal_requires_auth_and_creates(monkeypatch, client):
     # prepara fake DB que aceita INSERT e fornece lastrowid
     fake_cursor = FakeCursor(rows=[])
     fake_conn = FakeConn(rows=[])
-    # forçar lastrowid a algo conhecido
+    # forÃ§ar lastrowid a algo conhecido
     fake_cursor.lastrowid = 123
     # montar um factory que devolve uma conn cujo cursor tem lastrowid
     def _get_conn():
@@ -117,7 +120,7 @@ def test_create_animal_requires_auth_and_creates(monkeypatch, client):
 
 
 def test_create_animal_missing_required_fields_returns_400(client):
-    """POST /animais sem os campos obrigatórios deve retornar 400."""
+    """POST /animais sem os campos obrigatÃ³rios deve retornar 400."""
 
     import app.api as api_mod
     # safe patch
@@ -168,9 +171,9 @@ def test_adopt_animal_mark_and_unmark(monkeypatch, client):
                 cur._executed.append((sql, params))
                 # detecta o UPDATE que muda adotado_em
                 if "UPDATE animais SET adotado_em" in (sql or ""):
-                    # atualiza o estado do connection: o próximo cursor() deve ver updated_row
+                    # atualiza o estado do connection: o prÃ³ximo cursor() deve ver updated_row
                     self._one = self._after_update_one
-            # substitui o método execute do cursor pela versão que observa o SQL
+            # substitui o mÃ©todo execute do cursor pela versÃ£o que observa o SQL
             cur.execute = _execute_and_watch
             return cur
 
@@ -208,5 +211,6 @@ def test_recomendacoes_fallback_returns_recent(monkeypatch, client):
     items = data["items"]
     assert isinstance(items, list)
     assert len(items) <= 2
-    # garante que os nomes esperados estão presentes (A ou B etc)
+    # garante que os nomes esperados estÃ£o presentes (A ou B etc)
     assert any(i.get("nome") in ("A", "B", "C") for i in items)
+
