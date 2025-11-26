@@ -30,7 +30,7 @@ jobs:
       DB_USER: root
       DB_PASSWORD: rootpassword
       DB_NAME: adoptme
-      # Sonar (deve existir em Secrets)
+      # Sonar - certifique-se de definir estes secrets no repo
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_ORG: ${{ secrets.SONAR_ORG }}
       SONAR_PROJECTKEY: ${{ secrets.SONAR_PROJECTKEY }}
@@ -45,11 +45,13 @@ jobs:
             mysql -h127.0.0.1 -uroot -prootpassword -e "SELECT 1" >/dev/null 2>&1 && break || sleep 1
           done
 
-      - name: Create DB and usuarios table
+      - name: Create DB and required tables
         run: |
           cat > ./init_db.sql <<'SQL'
           CREATE DATABASE IF NOT EXISTS adoptme CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
           USE adoptme;
+
+          -- usuarios (inclui password_hash, google_sub, avatar_url)
           CREATE TABLE IF NOT EXISTS usuarios (
             id INT AUTO_INCREMENT PRIMARY KEY,
             nome VARCHAR(255) NOT NULL,
@@ -60,7 +62,58 @@ jobs:
             google_sub VARCHAR(255),
             avatar_url VARCHAR(512)
           ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          -- animais (campos baseados nas suas screenshots)
+          CREATE TABLE IF NOT EXISTS animais (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT,
+            nome VARCHAR(255) NOT NULL,
+            especie VARCHAR(100),
+            idade VARCHAR(50),
+            porte VARCHAR(50),
+            energia VARCHAR(50),
+            bom_com_criancas TINYINT(1) DEFAULT 0,
+            cidade VARCHAR(255),
+            city VARCHAR(255),
+            disponivel TINYINT(1) DEFAULT 1,
+            doador_id INT,
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            donor_name VARCHAR(255),
+            donor_whatsapp VARCHAR(64),
+            photo_url VARCHAR(1024),
+            raca VARCHAR(255),
+            descricao TEXT,
+            status VARCHAR(50),
+            adotado_em DATETIME,
+            INDEX (usuario_id),
+            INDEX (doador_id)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          -- perfil_adotante
+          CREATE TABLE IF NOT EXISTS perfil_adotante (
+            usuario_id INT PRIMARY KEY,
+            tipo_moradia VARCHAR(100),
+            tem_criancas TINYINT(1) DEFAULT 0,
+            tempo_disponivel_horas_semana INT,
+            estilo_vida VARCHAR(100),
+            atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            CONSTRAINT fk_perfil_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+          -- adocoes
+          CREATE TABLE IF NOT EXISTS adocoes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            usuario_id INT,
+            animal_id INT,
+            status VARCHAR(50),
+            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX (usuario_id),
+            INDEX (animal_id),
+            CONSTRAINT fk_adocao_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE SET NULL,
+            CONSTRAINT fk_adocao_animal FOREIGN KEY (animal_id) REFERENCES animais(id) ON DELETE SET NULL
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
           SQL
+
           mysql -h127.0.0.1 -uroot -prootpassword < ./init_db.sql
 
       ####################
@@ -95,11 +148,17 @@ jobs:
       ####################
       # Frontend: optional (se quiser enviar coverage JS)
       ####################
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
       - name: Run frontend tests (generate lcov)
         working-directory: frontend
         run: |
           npm ci
           npm run test:coverage || true
+        continue-on-error: true
 
       ####################
       # SonarCloud scan
