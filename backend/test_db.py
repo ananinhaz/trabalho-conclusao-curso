@@ -1,9 +1,7 @@
-# test_db.py
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-# carrega .env na pasta do projeto (se você usa .env)
 load_dotenv()
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
