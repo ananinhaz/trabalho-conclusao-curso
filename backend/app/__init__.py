@@ -3,19 +3,24 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Importação do Blueprint de saúde
 from .health import health_bp
 
 def create_app():
     load_dotenv()
+
     app = Flask(__name__)
+
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=False,
         SESSION_PERMANENT=False,
-        # SESSION_COOKIE_DOMAIN removed to avoid test client cookie/domain issues
+
+        SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL"),
+        SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
     )
+
     CORS(
         app,
         supports_credentials=True,
@@ -58,5 +63,4 @@ def create_app():
 
     return app
 
-# export a aplicação criada — necessário para pytest / fixtures e para imports diretos
 app = create_app()

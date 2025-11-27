@@ -35,12 +35,31 @@ def tables():
     cur = None
     try:
         conn = get_conn()
+
+        # Detectar Postgres
+        is_pg = hasattr(conn, "cursor") and conn.__class__.__module__.startswith("psycopg2")
+
         cur = conn.cursor()
-        cur.execute("SHOW TABLES")
-        data = [r[0] for r in cur.fetchall()]
+
+        if is_pg:
+            # Postgres
+            cur.execute("""
+                SELECT tablename
+                  FROM pg_catalog.pg_tables
+                 WHERE schemaname = 'public'
+                 ORDER BY tablename
+            """)
+            data = [r[0] for r in cur.fetchall()]
+        else:
+            # MySQL
+            cur.execute("SHOW TABLES")
+            data = [r[0] for r in cur.fetchall()]
+
         return jsonify({"tabelas": data}), 200
+
     except Exception as e:
         return jsonify({"erro": str(e)}), 500
+
     finally:
         try:
             if cur: cur.close()

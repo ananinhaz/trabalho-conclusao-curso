@@ -1,101 +1,50 @@
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, session
-from .extensions.db import db
 import numpy as np
-from sklearn.metrics.pairwise import pairwise_distances 
+from sklearn.metrics.pairwise import pairwise_distances
 from datetime import datetime, timedelta
+
+from .extensions import db as db_ext
 
 bp_api = Blueprint("api", __name__)
 
-# pesos da IA
+# IA — PESOS
 VEC_WEIGHTS = np.array([
-    1.0,  # [0] Porte/Moradia (V0)
-    1.0,  # [1] Crianças/Temperamento (V1)
-    5.0,  # [2] Tempo/Necessidade de Tempo (V2) - ponderado alto
-    1.0   # [3] Estilo de Vida/Atividade (V3)
-]) 
+    1.0,
+    1.0,
+    5.0,
+    1.0
+])
 
-def _build_user_vector(perfil: dict) -> list[float]:
-    """Cria um vetor numérico de 4 dimensões a partir do perfil do adotante."""
-    tm = (perfil.get("tipo_moradia") or "").lower()
-    tem_criancas = int(perfil.get("tem_criancas") or 0)
-    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
-    estilo = (perfil.get("estilo_vida") or "").lower()
-
-    if "aparta" in tm:
-        tm_vec = 0.0
-    elif "quintal" in tm or "casa" in tm:
-        tm_vec = 1.0
-    else:
-        tm_vec = 0.5
-    
-    tempo_norm = min(tempo, 20) / 20.0 
-
-    if "ativo" in estilo or "esport" in estilo:
-        estilo_vec = 1.0
-    elif "tranq" in estilo or "calmo" in estilo:
-        estilo_vec = 0.0
-    else:
-        estilo_vec = 0.5
-
-    return [tm_vec, float(tem_criancas), tempo_norm, estilo_vec]
-
-
-def _build_animal_vector(a: dict) -> list[float]:
-    """Cria um vetor numérico de 4 dimensões a partir dos atributos do animal."""
-    especie = str(a.get("especie") or "").lower()
-    porte = str(a.get("porte") or "").lower()
-    
-    age_value = str(a.get("idade") or "0")
-    
-    determined_idade = "desconhecido"
+def is_postgres() -> bool:
+    """Detecta se o backend está usando Postgres (compatível com os testes)."""
     try:
-        age_num = float(age_value.split()[0].replace(',', '.')) 
-        
-        if age_num <= 1:
-            determined_idade = "filhote"
-        elif age_num <= 7:
-            determined_idade = "adulto"
-        else:
-            determined_idade = "idoso"
-            
-    except (ValueError, IndexError):
-        determined_idade = age_value.lower() 
+        fn = getattr(db_ext, "using_postgres", None)
+        if callable(fn):
+            return bool(fn())
+    except Exception:
+        pass
+    try:
+        return bool(getattr(db_ext, "_using_postgres", False))
+    except Exception:
+        return False
 
-    idade = determined_idade
-
-    if especie == "gato" or porte == "pequeno":
-        v0 = 0.0
-    elif porte == "medio":
-        v0 = 0.5
-    else: 
-        v0 = 1.0
-
-    if idade == "idoso":
-        v1 = 0.0
-    elif idade == "adulto":
-        v1 = 0.5
-    else:
-        v1 = 1.0 
-
-    if especie == "gato":
-        v2 = 0.0
-    elif idade == "filhote" or especie == "cachorro":
-        v2 = 1.0
-    else: 
-        v2 = 0.5
-
-    if especie == "cachorro" or idade == "filhote":
-        v3 = 1.0
-    else: 
-        v3 = 0.0
-        
-    return [v0, v1, v2, v3]
 
 def _require_auth() -> int | None:
-    """Retorna user_id da sessão ou None."""
     uid = session.get("user_id")
     return int(uid) if uid else None
+
+
+def to_bool_like(v):
+    """Normaliza valores vindos do front/testes para boolean."""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return False
+    s = str(v).strip().lower()
+    if s in ("1", "true", "t", "yes", "y"):
+        return True
+    return False
 
 
 def _row_to_animal(row: dict) -> dict:
@@ -127,14 +76,86 @@ def _json_error(msg: str, code: int = 400):
 def _rows_to_payload(rows, ids):
     return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
 
-# Perfil do Adotante
+
+# IA — VETORES
+
+def _build_user_vector(perfil: dict) -> list[float]:
+    tm = (perfil.get("tipo_moradia") or "").lower()
+    tem_criancas = to_bool_like(perfil.get("tem_criancas"))
+    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
+    estilo = (perfil.get("estilo_vida") or "").lower()
+
+    tm_vec = 0.5
+    if "aparta" in tm:
+        tm_vec = 0.0
+    elif "casa" in tm or "quintal" in tm:
+        tm_vec = 1.0
+
+    tempo_norm = min(tempo, 20) / 20.0
+
+    if "ativo" in estilo or "esport" in estilo:
+        estilo_vec = 1.0
+    elif "tranq" in estilo or "calmo" in estilo:
+        estilo_vec = 0.0
+    else:
+        estilo_vec = 0.5
+
+    return [tm_vec, float(tem_criancas), tempo_norm, estilo_vec]
+
+
+def _build_animal_vector(a: dict) -> list[float]:
+    especie = str(a.get("especie") or "").lower()
+    porte = str(a.get("porte") or "").lower()
+
+    idade_raw = str(a.get("idade") or "0")
+    try:
+        n = float(idade_raw.split()[0].replace(",", "."))
+        if n <= 1:
+            idade = "filhote"
+        elif n <= 7:
+            idade = "adulto"
+        else:
+            idade = "idoso"
+    except Exception:
+        idade = idade_raw.lower()
+
+    if especie == "gato" or porte == "pequeno":
+        v0 = 0.0
+    elif porte == "medio" or "médio" in porte:
+        v0 = 0.5
+    else:
+        v0 = 1.0
+
+    if idade == "idoso":
+        v1 = 0.0
+    elif idade == "adulto":
+        v1 = 0.5
+    else:
+        v1 = 1.0
+
+    if especie == "gato":
+        v2 = 0.0
+    elif idade == "filhote" or especie == "cachorro":
+        v2 = 1.0
+    else:
+        v2 = 0.5
+
+    if especie == "cachorro" or idade == "filhote":
+        v3 = 1.0
+    else:
+        v3 = 0.0
+
+    return [v0, v1, v2, v3]
+
+# PERFIL DO ADOTANTE
+
 @bp_api.get("/perfil_adotante")
 def get_perfil_adotante():
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-    
-    with db() as conn:
+
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
@@ -157,35 +178,50 @@ def upsert_perfil_adotante():
 
     data = request.get_json(silent=True) or {}
     tipo_moradia = (data.get("tipo_moradia") or "").strip()
-    tem_criancas = int(data.get("tem_criancas") or 0)
+    tem_criancas = to_bool_like(data.get("tem_criancas"))
     tempo = int(data.get("tempo_disponivel_horas_semana") or 0)
     estilo_vida = (data.get("estilo_vida") or "").strip()
-
-    if len(estilo_vida) > 32:
-        return _json_error("estilo_vida muito longo (máx 32)")
 
     if not tipo_moradia or not estilo_vida:
         return _json_error("Dados obrigatórios ausentes")
 
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO perfil_adotante
-                    (usuario_id, tipo_moradia, tem_criancas,
-                     tempo_disponivel_horas_semana, estilo_vida)
-                VALUES (%s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE
-                    tipo_moradia = VALUES(tipo_moradia),
-                    tem_criancas = VALUES(tem_criancas),
-                    tempo_disponivel_horas_semana = VALUES(tempo_disponivel_horas_semana),
-                    estilo_vida = VALUES(estilo_vida)
-                """,
-                (uid, tipo_moradia, tem_criancas, tempo, estilo_vida),
-            )
+            if is_postgres():
+                cur.execute(
+                    """
+                    INSERT INTO perfil_adotante
+                        (usuario_id, tipo_moradia, tem_criancas,
+                         tempo_disponivel_horas_semana, estilo_vida)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (usuario_id) DO UPDATE
+                      SET tipo_moradia = EXCLUDED.tipo_moradia,
+                          tem_criancas = EXCLUDED.tem_criancas,
+                          tempo_disponivel_horas_semana = EXCLUDED.tempo_disponivel_horas_semana,
+                          estilo_vida = EXCLUDED.estilo_vida
+                    """,
+                    (uid, tipo_moradia, tem_criancas, tempo, estilo_vida),
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO perfil_adotante
+                        (usuario_id, tipo_moradia, tem_criancas,
+                         tempo_disponivel_horas_semana, estilo_vida)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        tipo_moradia = VALUES(tipo_moradia),
+                        tem_criancas = VALUES(tem_criancas),
+                        tempo_disponivel_horas_semana = VALUES(tempo_disponivel_horas_semana),
+                        estilo_vida = VALUES(estilo_vida)
+                    """,
+                    (uid, tipo_moradia, tem_criancas, tempo, estilo_vida),
+                )
     return jsonify({"ok": True})
 
-# Animais CRUD e Listagem
+
+# LISTAGEM DE ANIMAIS
+
 @bp_api.get("/animais")
 def list_animais():
     especie = request.args.get("especie") or ""
@@ -193,17 +229,21 @@ def list_animais():
     porte = (request.args.get("porte") or "").lower()
     cidade_qs = (request.args.get("cidade") or "").strip().lower()
 
-    where, params = [], []
+    where = []
+    params = []
 
     if especie:
         where.append("a.especie = %s")
         params.append(especie)
+
     if idade in ("filhote", "adulto", "idoso"):
         where.append("LOWER(a.idade) LIKE %s")
         params.append(f"%{idade}%")
+
     if porte in ("pequeno", "medio", "grande"):
         where.append("LOWER(a.porte) LIKE %s")
         params.append(f"%{porte}%")
+
     if cidade_qs:
         where.append("LOWER(a.cidade) LIKE %s")
         params.append(f"%{cidade_qs}%")
@@ -214,89 +254,104 @@ def list_animais():
                a.doador_id, a.criado_em AS created_at,
                a.energia, a.bom_com_criancas,
                a.adotado_em
-          FROM animais a
+        FROM animais a
     """
+
     if where:
         sql += " WHERE " + " AND ".join(where)
+
     sql += " ORDER BY a.criado_em DESC LIMIT 200"
 
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(sql, tuple(params))
             rows = cur.fetchall() or []
 
     return jsonify([_row_to_animal(r) for r in rows])
 
+# CRIAÇÃO DE ANIMAL
 
 @bp_api.post("/animais")
 def create_animal():
-    """
-    Versão defensiva de create_animal: não chama .strip() em valores que podem ser int,
-    garantindo que enviar idade como número não quebre os testes.
-    """
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
 
     data = request.get_json(silent=True) or {}
 
-    def _safe_strip(val):
-        if val is None:
+    def _safe_strip(v):
+        if v is None:
             return None
-        if isinstance(val, str):
-            return val.strip()
-        # converte outros tipos (int/float) para str e strip seguro
-        try:
-            return str(val).strip()
-        except Exception:
-            return None
+        if isinstance(v, str):
+            return v.strip()
+        return str(v).strip()
 
-    nome = _safe_strip(data.get("nome")) or ""
-    especie = _safe_strip(data.get("especie")) or ""
+    nome = _safe_strip(data.get("nome"))
+    especie = _safe_strip(data.get("especie"))
     raca = _safe_strip(data.get("raca"))
-    raw_idade = data.get("idade")
-    if raw_idade is None or raw_idade == "":
-        idade = None
-    else:
-        idade = _safe_strip(raw_idade)
+    idade_raw = data.get("idade")
+    idade = _safe_strip(idade_raw) if idade_raw not in (None, "") else None
     porte = _safe_strip(data.get("porte"))
-    descricao = _safe_strip(data.get("descricao")) or ""
-    cidade = _safe_strip(data.get("cidade")) or ""
+    descricao = _safe_strip(data.get("descricao"))
+    cidade = _safe_strip(data.get("cidade"))
     photo_url = _safe_strip(data.get("photo_url"))
     donor_name = _safe_strip(data.get("donor_name"))
     donor_whatsapp = _safe_strip(data.get("donor_whatsapp"))
     energia = _safe_strip(data.get("energia"))
-    try:
-        bom_com_criancas = int(data.get("bom_com_criancas") or 0)
-    except Exception:
-        bom_com_criancas = 0
+
+    bom_com_criancas = to_bool_like(data.get("bom_com_criancas"))
 
     if not (nome and especie and descricao and cidade):
         return _json_error("Dados obrigatórios ausentes")
 
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO animais
-                    (doador_id, nome, especie, raca, idade, porte,
-                     descricao, cidade, photo_url, donor_name, donor_whatsapp,
-                     energia, bom_com_criancas)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (
-                    uid, nome, especie, raca, idade, porte, descricao, 
-                    cidade, photo_url, donor_name, donor_whatsapp,
-                    energia, bom_com_criancas
-                ),
-            )
-            animal_id = cur.lastrowid
+            if is_postgres():
+                cur.execute(
+                    """
+                    INSERT INTO animais
+                        (doador_id, nome, especie, raca, idade, porte,
+                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
+                         energia, bom_com_criancas)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    RETURNING id
+                    """,
+                    (
+                        uid, nome, especie, raca, idade, porte,
+                        descricao, cidade, photo_url, donor_name, donor_whatsapp,
+                        energia, bom_com_criancas
+                    ),
+                )
+                row = cur.fetchone()
+                animal_id = row[0] if row else None
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO animais
+                        (doador_id, nome, especie, raca, idade, porte,
+                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
+                         energia, bom_com_criancas)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """,
+                    (
+                        uid, nome, especie, raca, idade, porte,
+                        descricao, cidade, photo_url, donor_name, donor_whatsapp,
+                        energia, bom_com_criancas
+                    ),
+                )
+                try:
+                    animal_id = cur.lastrowid
+                except Exception:
+                    animal_id = None
+
     return jsonify({"ok": True, "id": animal_id})
 
 
+# GET /animais/<id>
+
 @bp_api.get("/animais/<int:aid>")
 def get_animal(aid: int):
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
@@ -312,8 +367,17 @@ def get_animal(aid: int):
             row = cur.fetchone()
     if not row:
         return _json_error("not found", 404)
+    if "bom_com_criancas" in row:
+        row["bom_com_criancas"] = bool(row["bom_com_criancas"])
+    if row and row.get("adotado_em") is not None:
+        try:
+            row["adotado_em"] = row["adotado_em"].isoformat()
+        except Exception:
+            row["adotado_em"] = str(row["adotado_em"])
     return jsonify(_row_to_animal(row))
 
+
+# UPDATE ANIMAL
 
 @bp_api.put("/animais/<int:aid>")
 def update_animal(aid: int):
@@ -322,37 +386,42 @@ def update_animal(aid: int):
         return _json_error("unauthenticated", 401)
 
     data = request.get_json(silent=True) or {}
-    
     adotado_em = data.get("adotado_em")
-    
-    nome = (data.get("nome") or "").strip()
-    especie = (data.get("especie") or "").strip()
-    raca = (data.get("raca") or None)
-    idade = data.get("idade")
-    porte = (data.get("porte") or None)
-    descricao = (data.get("descricao") or "").strip()
-    cidade = (data.get("cidade") or "").strip()
-    photo_url = (data.get("photo_url") or "").strip()
-    energia = (data.get("energia") or None)
-    bom_com_criancas = (data.get("bom_com_criancas") or 0)
 
-    # Lógica de segurança para não apagar dados se o front mandar vazio
-    with db() as conn:
+    def _safe_strip_val(v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v.strip()
+        return str(v).strip()
+
+    nome = _safe_strip_val(data.get("nome"))
+    especie = _safe_strip_val(data.get("especie"))
+    raca = data.get("raca")
+    idade = data.get("idade")
+    porte = data.get("porte")
+    descricao = _safe_strip_val(data.get("descricao"))
+    cidade = _safe_strip_val(data.get("cidade"))
+    photo_url = _safe_strip_val(data.get("photo_url"))
+    energia = data.get("energia")
+    bom_com_criancas = to_bool_like(data.get("bom_com_criancas"))
+
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute("SELECT * FROM animais WHERE id=%s", (aid,))
             owner = cur.fetchone()
             if not owner:
                 return _json_error("not found", 404)
-            if int(owner["doador_id"] or 0) != int(uid):
+            if int(owner.get("doador_id") or 0) != int(uid):
                 return _json_error("forbidden", 403)
-            
-            # Se campos vierem vazios, mantem os antigos
-            if not nome: nome = owner['nome']
-            if not especie: especie = owner['especie']
-            if not descricao: descricao = owner['descricao']
-            if not cidade: cidade = owner['cidade']
-            if not photo_url: photo_url = owner['photo_url']
-            if 'adotado_em' not in data: adotado_em = owner['adotado_em'] # Mantém status anterior se não vier
+
+            if not nome: nome = owner.get('nome')
+            if not especie: especie = owner.get('especie')
+            if not descricao: descricao = owner.get('descricao')
+            if not cidade: cidade = owner.get('cidade')
+            if not photo_url: photo_url = owner.get('photo_url')
+            if 'adotado_em' not in data:
+                adotado_em = owner.get('adotado_em')
 
             cur.execute(
                 """
@@ -371,22 +440,24 @@ def update_animal(aid: int):
             )
     return jsonify({"ok": True})
 
+# DELETE ANIMAL
 @bp_api.delete("/animais/<int:aid>")
 def delete_animal(aid: int):
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
             owner = cur.fetchone()
             if not owner:
                 return _json_error("not found", 404)
-            if int(owner["doador_id"] or 0) != int(uid):
+            if int(owner.get("doador_id") or 0) != int(uid):
                 return _json_error("forbidden", 403)
             cur.execute("DELETE FROM animais WHERE id=%s", (aid,))
     return jsonify({"ok": True})
 
+# ANIMAIS MINE
 
 @bp_api.get("/animais/mine")
 def animais_mine():
@@ -394,7 +465,7 @@ def animais_mine():
     if not uid:
         return _json_error("unauthenticated", 401)
 
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
@@ -411,33 +482,67 @@ def animais_mine():
             rows = cur.fetchall() or []
     return jsonify([_row_to_animal(r) for r in rows])
 
-# rota de recomendação
+# RECOMENDAÇÕES (IA) - FALLBACK + PERFIL + KNN
+
 @bp_api.get("/recomendacoes")
 def recomendacoes():
     n = int(request.args.get("n") or 6)
     uid = _require_auth()
 
-    # Lógica de fallback
+    # --- fallback quando não autenticado
     if not uid:
-        with db() as conn:
-            with conn.cursor(dictionary=True) as cur:
-                cur.execute(
-                    """
-                    SELECT id, nome, especie, raca, idade, porte, descricao,
-                           cidade, photo_url, donor_name, donor_whatsapp,
-                           criado_em AS created_at,
-                           energia, bom_com_criancas, adotado_em
-                      FROM animais
-                     ORDER BY criado_em DESC
-                     LIMIT %s
-                    """,
-                    (n,),
-                )
-                rows = cur.fetchall() or []
-        return jsonify(_rows_to_payload(rows, []))
+        conn = db_ext.get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, nome, especie, raca, idade, porte, descricao,
+                       cidade, photo_url, donor_name, donor_whatsapp,
+                       criado_em AS created_at,
+                       energia, bom_com_criancas, adotado_em
+                  FROM animais
+                 ORDER BY criado_em DESC
+                 LIMIT %s
+                """,
+                (n,),
+            )
+            rows = cur.fetchall() or []
+            if rows and isinstance(rows[0], dict):
+                limited = rows[:n]
+            else:
+                cols = None
+                try:
+                    desc = getattr(cur, "description", None)
+                    if desc:
+                        cols = [d[0] for d in desc]
+                except Exception:
+                    cols = None
+                normalized = []
+                for r in rows:
+                    if isinstance(r, dict):
+                        normalized.append(r)
+                    elif cols and len(cols) == len(r):
+                        normalized.append({k: v for k, v in zip(cols, r)})
+                    else:
+                        d = {}
+                        d["id"] = r[0] if len(r) > 0 else None
+                        d["nome"] = r[1] if len(r) > 1 else None
+                        normalized.append(d)
+                limited = normalized[:n]
+            try:
+                cur.close()
+            except Exception:
+                pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
-    # Busca perfil
-    with db() as conn:
+        return jsonify(_rows_to_payload(limited, []))
+
+    # se autenticado, busca perfil 
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
@@ -451,8 +556,8 @@ def recomendacoes():
             perfil = cur.fetchone()
 
     if not perfil:
-        # Lógica de fallback para sem perfil
-        with db() as conn:
+        # sem perfil -> fallback simples
+        with db_ext.db() as conn:
             with conn.cursor(dictionary=True) as cur:
                 cur.execute(
                     """
@@ -469,8 +574,8 @@ def recomendacoes():
                 rows = cur.fetchall() or []
         return jsonify(_rows_to_payload(rows, []))
 
-    # Tem perfil -> pega todos os animais
-    with db() as conn:
+    # se tem perfil -> pega todos os animais e processa IA
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
                 """
@@ -483,11 +588,11 @@ def recomendacoes():
             )
             animals = cur.fetchall() or []
 
-    # regras duras (filtros)
+    # filtros 
     tm = (perfil.get("tipo_moradia") or "").lower()
     tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
 
-    def _hard_ok(a):       
+    def _hard_ok(a):
         especie = str(a.get("especie") or "").lower()
         porte = str(a.get("porte") or "").lower()
 
@@ -505,49 +610,40 @@ def recomendacoes():
     if not filtered:
         filtered = animals
 
-    # vetores e ranking KNN Ponderado com Scikit-learn
+    # vetores e ranking
     user_vec = _build_user_vector(perfil)
-    
     user_vec_np = np.array([user_vec])
     animal_vectors = []
     animal_map = []
-    
+
     for r in filtered:
-        animal_vec = _build_animal_vector(r) 
+        animal_vec = _build_animal_vector(r)
         if len(animal_vec) == len(VEC_WEIGHTS):
             animal_vectors.append(animal_vec)
             animal_map.append(r)
-        
+
     X_animals = np.array(animal_vectors)
-    
     if X_animals.size == 0:
-         return jsonify(_rows_to_payload([], []))
+        return jsonify(_rows_to_payload([], []))
 
     distances = pairwise_distances(
-        user_vec_np, 
-        X_animals, 
+        user_vec_np,
+        X_animals,
         metric='minkowski',
-        p=2, 
+        p=2,
         w=VEC_WEIGHTS
-    )[0] 
+    )[0]
 
-    scored: list[tuple[float, dict]] = []
-    for dist, animal_data in zip(distances, animal_map):
-        scored.append((float(dist), animal_data))
-
+    scored = [(float(dist), animal_data) for dist, animal_data in zip(distances, animal_map)]
     scored.sort(key=lambda x: x[0])
-    
+
     top = [a for _, a in scored[:n]]
     ids = [a["id"] for a in top]
     return jsonify(_rows_to_payload(top, ids))
 
-# rotas adoções e metricas
+# marcar/desmarcar adotado_em
 @bp_api.patch("/animais/<int:aid>/adopt")
 def adopt_animal(aid: int):
-    """
-    Marca (action=mark) ou desmarca (action=undo) o campo adotado_em do animal.
-    Requer autenticação e que o usuário seja o dono (doador).
-    """
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
@@ -557,55 +653,66 @@ def adopt_animal(aid: int):
     if action not in ("mark", "undo"):
         return _json_error("invalid_action")
 
-    with db() as conn:
-        with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
-            owner = cur.fetchone()
-            if not owner:
-                return _json_error("not found", 404)
-            if int(owner.get("doador_id") or 0) != int(uid):
-                return _json_error("forbidden", 403)
+    conn = db_ext.get_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
+        owner = cur.fetchone()
+        if not owner:
+            cur.close()
+            return _json_error("not found", 404)
 
-            if action == "mark":
-                # marca a data atual UTC
-                cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
-            else:
-                # desfaz o adotado
-                cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
+        if int(owner.get("doador_id") or 0) != int(uid):
+            cur.close()
+            return _json_error("forbidden", 403)
 
-        # pega o registro atualizado para devolver
-        with conn.cursor(dictionary=True) as cur2:
-            cur2.execute(
-                """
-                SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       doador_id, criado_em AS created_at, energia, bom_com_criancas,
-                       adotado_em
-                  FROM animais
-                 WHERE id=%s
-                """,
-                (aid,),
-            )
-            row = cur2.fetchone()
+        if action == "mark":
+            cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
+        else:
+            cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
+        cur.close()
 
-    # Converte para o formato de frontend
-    animal = _row_to_animal(row)
-    # Garante serialização de data se necessário
-    if row and row.get("adotado_em"):
-        animal["adotado_em"] = row["adotado_em"].isoformat() if hasattr(row["adotado_em"], 'isoformat') else str(row["adotado_em"])
-    
-    return jsonify({"ok": True, "animal": animal})
+        cur2 = conn.cursor(dictionary=True)
+        cur2.execute(
+            """
+            SELECT id, nome, especie, raca, idade, porte, descricao,
+                   cidade, photo_url, donor_name, donor_whatsapp,
+                   doador_id, criado_em AS created_at, energia, bom_com_criancas,
+                   adotado_em
+              FROM animais
+             WHERE id=%s
+            """,
+            (aid,),
+        )
+        row = cur2.fetchone()
+        cur2.close()
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if not row:
+        return _json_error("not found", 404)
+
+    if row.get("adotado_em") is not None:
+        try:
+            row["adotado_em"] = row["adotado_em"].isoformat()
+        except Exception:
+            row["adotado_em"] = str(row["adotado_em"])
+
+    return jsonify({"ok": True, "animal": _row_to_animal(row)})
+
+# MÉTRICAS DE ADOÇÃO
 
 @bp_api.get("/animais/metrics/adoptions")
 def adoption_metrics():
-    """
-    Retorna métricas de adoção para o gráfico da Landing Page.
-    """
     try:
         days = int(request.args.get("days") or 7)
-    except ValueError:
+    except Exception:
         days = 7
-    if days <= 0: days = 7
+    if days <= 0:
+        days = 7
     days = min(days, 90)
 
     end = datetime.utcnow().date()
@@ -619,21 +726,24 @@ def adoption_metrics():
          GROUP BY DATE(adotado_em)
          ORDER BY DATE(adotado_em) ASC
     """
-    with db() as conn:
+    with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(sql, (start.isoformat(), end.isoformat()))
             rows = cur.fetchall() or []
 
-    counts = { (r["day"].isoformat() if hasattr(r["day"], "isoformat") else str(r["day"])): int(r["cnt"] or 0) for r in rows }
+    counts = {
+        (r["day"].isoformat() if hasattr(r["day"], "isoformat") else str(r["day"])): int(r["cnt"] or 0)
+        for r in rows
+    }
 
     result = []
     for i in range(days):
-        d = (start + timedelta(days=i))
+        d = start + timedelta(days=i)
         ds = d.isoformat()
         result.append({"day": ds, "count": counts.get(ds, 0)})
 
     return jsonify({"ok": True, "days": result})
 
-# Registrar no app 
+# REGISTRO DE BLUEPRINTS
 def register_blueprints(app):
     app.register_blueprint(bp_api)
