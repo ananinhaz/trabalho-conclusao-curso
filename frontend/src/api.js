@@ -1,11 +1,16 @@
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+function joinUrl(base, path) {
+  if (!base.endsWith('/') && !path.startsWith('/')) return base + '/' + path;
+  if (base.endsWith('/') && path.startsWith('/')) return base.slice(0, -1) + path;
+  return base + path;
+}
 
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   const fetchUrl = API_BASE.endsWith('/') && path.startsWith('/')
-    ? API_BASE.slice(0, -1) + path 
+    ? API_BASE.slice(0, -1) + path
     : API_BASE + path;
-  
+
   const res = await fetch(fetchUrl, {
     method,
     credentials: 'include',
@@ -16,7 +21,6 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  // tenta json; se não for JSON, pega o text
   let data = {};
   let text = '';
   try {
@@ -30,10 +34,8 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   }
 
   if (!res.ok) {
-    // monta mensagem completa para debugging (status + possible JSON error + raw text)
     const msg = data?.error || data?.message || (text ? text : `Erro ${res.status}`);
     const err = new Error(msg);
-    // adiciona detalhes ao error object para inspeção no catch
     err.httpStatus = res.status;
     err.httpData = data;
     err.httpText = text;
@@ -41,7 +43,6 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   }
   return data;
 }
-
 
 export function apiGet(path) {
   return apiFetch(path);
@@ -70,23 +71,24 @@ export const authApi = {
   logout() {
     return apiPost('/auth/logout', {});
   },
-  
+
   loginWithGoogle(nextPath) {
-  
-    const isAbsoluteUrl = API_BASE.startsWith('http');
-    
-    let baseUrl = API_BASE;
-    if (isAbsoluteUrl) {
-        baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    // rota correta no backend: /auth/login/google
+    const relativePath = '/auth/login/google';
+    const isAbsolute = API_BASE.startsWith('http://') || API_BASE.startsWith('https://');
+
+    let target;
+    if (isAbsolute) {
+      // API_BASE pode já conter '/api' ou o host completo
+      const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+      target = baseNoSlash + relativePath;
+    } else {
+      // em dev usando proxy /api -> backend; monta com /api prefix
+      target = '/api' + relativePath;
     }
 
-    const relativePath = '/auth/google/login'; // Rota no Flask
-    
-    const url = 
-      (isAbsoluteUrl ? baseUrl + relativePath : '/api' + relativePath) +
-      (nextPath ? `?next=${encodeURIComponent(nextPath)}` : '');
-      
-    window.location.href = url;
+    if (nextPath) target += `?next=${encodeURIComponent(nextPath)}`;
+    window.location.href = target;
   },
 };
 
@@ -108,44 +110,29 @@ export const animaisApi = {
     const suffix = qs ? `?${qs}` : '';
     return apiGet(`/animais${suffix}`);
   },
-
-  // animais do usuário
   mine() {
     return apiGet('/animais/mine');
   },
-
-  // detalhe do animal
   get(id) {
     return apiGet(`/animais/${id}`);
   },
-
-  // criar novo
   create(payload) {
     return apiPost('/animais', payload);
   },
-
-  // atualizar
   update(id, payload) {
     return apiPut(`/animais/${id}`, payload);
   },
-
-  // remover
   remove(id) {
     return apiDel(`/animais/${id}`);
   },
-
-  // marcar/desmarcar adotado patch
   adopt(id, { action = 'mark' } = {}) {
     return apiFetch(`/animais/${id}/adopt`, { method: 'PATCH', body: { action } });
   },
-
-  // métricas 
   adoptionMetrics(days = 7) {
     return apiGet(`/animais/metrics/adoptions?days=${days}`);
   },
 };
 
-// recomendações
 export const recApi = {
   list(n = 12) {
     return apiGet(`/recomendacoes?n=${n}`);

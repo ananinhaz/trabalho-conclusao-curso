@@ -10,37 +10,40 @@ def create_app():
 
     app = Flask(__name__)
 
+    # FRONT_HOME configurado (frontend) — usado no CORS e para decidir cookie secure
+    frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173").rstrip('/')
+
+    # Detecta se estamos em ambiente local (http) ou produção (https)
+    is_local_frontend = frontend_origin.startswith("http://localhost") or frontend_origin.startswith("http://127.0.0.1")
+
+    # Em produção devemos usar Secure=True e SameSite=None para que cookies cross-site funcionem
+    session_cookie_secure = not is_local_frontend
+    session_cookie_samesite = "None" if session_cookie_secure else "Lax"
+
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
-        SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=False,
+        SESSION_COOKIE_SAMESITE=session_cookie_samesite,
+        SESSION_COOKIE_SECURE=session_cookie_secure,
         SESSION_PERMANENT=False,
 
         SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL"),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
     )
-    
-    # PEGA A URL DO VERCELL (FRONT_HOME) DAS VARIÁVEIS DE AMBIENTE
-    # O valor padrão 'http://localhost:5173' eh usado em desenvolvimento
-    # Em produção, ele pega 'https://trabalho-conclusao-curso-adoptme.vercel.app/'
-    frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173")
-    
+
+    # allowed origins: locais + frontend production (da env)
     allowed_origins = [
         "http://127.0.0.1:8080",
         "http://localhost:8080",
         "http://127.0.0.1:5173",
         "http://localhost:5173",
-
-        frontend_origin.rstrip('/'), 
-        frontend_origin, 
+        frontend_origin,
     ]
 
-    # CONFIGURA O CORS COM A LISTA DE ORIGENS DINÂMICA
+    # CORS: permita credenciais e somente o frontend
     CORS(
         app,
         supports_credentials=True,
-        # 'allowed_origins' agora contém a URL do Vercel!
         resources={r"/*": {"origins": allowed_origins}},
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -49,6 +52,7 @@ def create_app():
 
     @app.before_request
     def _preflight():
+        # responde rapidamente às preflight OPTIONS
         if request.method == "OPTIONS":
             return app.make_response(("", 200))
 

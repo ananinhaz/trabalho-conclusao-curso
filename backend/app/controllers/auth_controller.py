@@ -9,9 +9,9 @@ from ..extensions.oauth import oauth
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# config
-FRONT_DEFAULT = "http://127.0.0.1:5173/"
-GOOGLE_CALLBACK = "http://127.0.0.1:5000/auth/google/callback"
+# config: use env vars (em produção defina FRONT_HOME e GOOGLE_CALLBACK)
+FRONT_DEFAULT = os.getenv("FRONT_HOME", "http://127.0.0.1:5173/")
+GOOGLE_CALLBACK = os.getenv("GOOGLE_CALLBACK", "http://127.0.0.1:5000/auth/google/callback")
 
 
 def _get_user_by_id(uid: int):
@@ -27,10 +27,6 @@ def _get_user_by_id(uid: int):
 
 
 def _abs_front_url(target: str) -> str:
-    """
-    Se vier só '/perfil-adotante', converte para
-    'http://127.0.0.1:5173/perfil-adotante'.
-    """
     if not target:
         return FRONT_DEFAULT
     if target.startswith("http://") or target.startswith("https://"):
@@ -39,10 +35,6 @@ def _abs_front_url(target: str) -> str:
 
 
 def _commit_and_redirect(url: str):
-    """
-    HTMLzinho que só redireciona. Garante que o cookie da sessão
-    chegue primeiro no browser.
-    """
     final_url = _abs_front_url(url)
     return (
         f"""<!doctype html><meta charset="utf-8">
@@ -53,6 +45,23 @@ def _commit_and_redirect(url: str):
         200,
         {"Content-Type": "text/html; charset=utf-8"},
     )
+
+
+def is_postgres_db() -> bool:
+    """
+    Detecta se o 'db' extension está configurada para Postgres.
+    Implementa heurística similar ao resto do projeto.
+    """
+    try:
+        fn = getattr(db, "using_postgres", None)
+        if callable(fn):
+            return bool(fn())
+    except Exception:
+        pass
+    try:
+        return bool(getattr(db, "_using_postgres", False))
+    except Exception:
+        return False
 
 
 # cadastro/login
@@ -75,30 +84,61 @@ def register():
                 return jsonify(ok=False, error="Email já cadastrado"), 400
             cur.close()
 
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
-                (nome, email, generate_password_hash(senha)),
-            )
-            uid = cur.lastrowid
-            cur.close()
+            # Inserção compatível com Postgres (RETURNING) e MySQL (lastrowid)
+            if is_postgres_db():
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s) RETURNING id",
+                    (nome, email, generate_password_hash(senha)),
+                )
+                row = cur.fetchone()
+                # row pode ser tuple/list com primeiro elemento id
+                if row:
+                    try:
+                        uid = int(row[0])
+                    except Exception:
+                        uid = None
+                else:
+                    uid = None
+                cur.close()
+            else:
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
+                    (nome, email, generate_password_hash(senha)),
+                )
+                try:
+                    uid = int(cur.lastrowid)
+                except Exception:
+                    uid = None
+                cur.close()
+
+            # sanity check
+            if not uid:
+                # tenta buscar pelo email (por segurança)
+                cur = conn.cursor(dictionary=True)
+                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                r = cur.fetchone()
+                cur.close()
+                if r and r.get("id"):
+                    uid = int(r.get("id"))
+                else:
+                    raise RuntimeError("Não foi possível obter id do novo usuário")
     except Exception as exc:
         print("Erro no DB durante register:", exc)
         return jsonify(ok=False, error="Erro interno"), 500
 
-    session["user_id"] = uid
+    session["user_id"] = int(uid)
     session.modified = True
     return jsonify(ok=True, user=_get_user_by_id(uid))
 
 
 @bp.post("/login")
 def login():
-    # defensivo: não confiar no payload; evita 500 quando campos ausentes
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     senha = data.get("senha") or ""
 
-    # -> proteção explícita: se faltar email ou senha, devolve 401 sem tocar no DB
     if not (email and senha):
         return jsonify(ok=False, error="Credenciais inválidas"), 401
 
@@ -126,27 +166,13 @@ def logout():
     return jsonify(ok=True)
 
 
-# /auth/me  (usado pelo front pra saber se está logado)
 @bp.get("/me")
 def me():
-    """
-    Retorna o usuário logado com os dados básicos (id, nome, email, avatar_url).
-    Se não estiver logado, devolve 401 com authenticated: False.
-    """
-    # útil para debugging em CI: ver o que tem na sessão
     print("SESSION NO /me:", dict(session))
-
-    # 🔥 Ajuste para passar nos testes unitários:
-    # alguns testes usam session["user_id"], outros session["user"] = {"id": X}
-    user_id = (
-        session.get("user_id")
-        or (session.get("user") or {}).get("id")
-    )
-
+    user_id = session.get("user_id") or (session.get("user") or {}).get("id")
     if not user_id:
         return jsonify({"authenticated": False}), 401
 
-    # Busca o usuário no banco
     try:
         with db() as conn:
             with conn.cursor(dictionary=True) as cur:
@@ -161,7 +187,6 @@ def me():
         return jsonify({"authenticated": False}), 401
 
     if not user:
-        # sessão com user_id inválido limpa sessão por segurança
         session.clear()
         return jsonify({"authenticated": False}), 401
 
@@ -172,7 +197,7 @@ def me():
 @bp.get("/login/google")
 def login_google():
     """
-    React chama: /auth/login/google?next=/perfil-adotante
+    Front chama: /auth/login/google?next=/perfil-adotante
     """
     next_url = request.args.get("next") or ""
     if next_url:
@@ -188,23 +213,19 @@ def login_google():
 
 @bp.get("/google/callback")
 def google_callback():
-    # troca o code pelo token
     token = oauth.google.safe_authorize_access_token()
     print("🔍 Google token:", token)
     access_token = token.get("access_token")
     if not access_token:
         return jsonify(ok=False, error="Google não retornou access_token"), 400
 
-    # pega dados do usuário no Google
     resp = requests.get(
         "https://openidconnect.googleapis.com/v1/userinfo",
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=10,
     )
     if resp.status_code != 200:
-        return jsonify(
-            ok=False, error=f"Falha ao obter userinfo: {resp.text}"
-        ), 400
+        return jsonify(ok=False, error=f"Falha ao obter userinfo: {resp.text}"), 400
 
     info = resp.json()
     sub = info.get("sub")
@@ -215,7 +236,6 @@ def google_callback():
     if not sub:
         return jsonify(ok=False, error="Google não retornou sub"), 400
 
-    # decide pra onde voltar
     session_next = session.pop("after_login_next", None)
     state_next = request.args.get("state")
     final_next = (
@@ -224,12 +244,10 @@ def google_callback():
         or FRONT_DEFAULT
     )
 
-    # upsert do usuário
     try:
         with db() as conn:
             cur = conn.cursor(dictionary=True)
 
-            # procura por google_sub
             cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
             u = cur.fetchone()
             if u:
@@ -240,7 +258,6 @@ def google_callback():
                 print("✅ login google: achou por google_sub ->", user_id)
                 return _commit_and_redirect(final_next)
 
-            # procura por email existente
             if email:
                 cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
                 u = cur.fetchone()
@@ -258,18 +275,33 @@ def google_callback():
                     print("✅ login google: achou por email e vinculou ->", user_id)
                     return _commit_and_redirect(final_next)
 
-            # cria novo
             cur.close()
             cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
-                (nome, email, sub, avatar),
-            )
-            new_id = cur.lastrowid
-            cur.close()
+            # new user (Postgres/MySQL compatible: use RETURNING if available)
+            if is_postgres_db():
+                cur.execute(
+                    "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s) RETURNING id",
+                    (nome, email, sub, avatar),
+                )
+                row = cur.fetchone()
+                new_id = int(row[0]) if row else None
+                cur.close()
+            else:
+                cur.execute(
+                    "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
+                    (nome, email, sub, avatar),
+                )
+                try:
+                    new_id = int(cur.lastrowid)
+                except Exception:
+                    new_id = None
+                cur.close()
     except Exception as exc:
         print("Erro no DB durante google_callback:", exc)
         return jsonify(ok=False, error="Erro interno"), 500
+
+    if not new_id:
+        return jsonify(ok=False, error="Falha ao criar usuário"), 500
 
     session["user_id"] = int(new_id)
     session.modified = True
