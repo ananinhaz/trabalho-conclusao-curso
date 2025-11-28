@@ -207,17 +207,18 @@ export default function Donate() {
               <MenuItem value="Alta">Alta (muito ativo, esportivo)</MenuItem>
             </TextField>
 
-            <TextField
-              select
-              label="Bom com Crianças?"
-              value={form.bom_com_criancas}
-              onChange={e => setForm(f => ({ ...f, bom_com_criancas: parseInt(e.target.value) }))}
-              required
-              fullWidth
-            >
-              <MenuItem value={1}>Sim</MenuItem>
-              <MenuItem value={0}>Não</MenuItem>
-            </TextField>
+<TextField
+  select
+  label="Bom com Crianças?"
+  value={String(form.bom_com_criancas ?? 0)}   // use '0' ou '1' como string para o MUI
+  onChange={e => setForm(f => ({ ...f, bom_com_criancas: Number(e.target.value) }))}
+  required
+  fullWidth
+>
+  <MenuItem value="1">Sim</MenuItem>
+  <MenuItem value="0">Não</MenuItem>
+</TextField>
+
             
             <TextField
               label="Descrição"

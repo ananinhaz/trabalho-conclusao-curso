@@ -47,8 +47,30 @@ def to_bool_like(v):
     return False
 
 
+def _normalize_to_int_bool(v):
+    """Converte valores booleanos/t/f/1/0 para 1/0 ou None se v is None."""
+    if v is None:
+        return None
+    try:
+        # Se já é bool
+        if isinstance(v, bool):
+            return 1 if v else 0
+        # números
+        if isinstance(v, (int, float)):
+            return 1 if int(v) != 0 else 0
+        s = str(v).strip().lower()
+        if s in ("1", "true", "t", "yes", "y"):
+            return 1
+        return 0
+    except Exception:
+        return None
+
+
 def _row_to_animal(row: dict) -> dict:
     """Normaliza saída de animal para o front."""
+    bom = row.get("bom_com_criancas")
+    bom_val = _normalize_to_int_bool(bom)
+
     return {
         "id": row.get("id"),
         "nome": row.get("nome"),
@@ -64,7 +86,7 @@ def _row_to_animal(row: dict) -> dict:
         "doador_id": row.get("doador_id"),
         "created_at": row.get("created_at"),
         "energia": row.get("energia"),
-        "bom_com_criancas": row.get("bom_com_criancas"),
+        "bom_com_criancas": bom_val,
         "adotado_em": row.get("adotado_em"),
     }
 
@@ -106,7 +128,7 @@ def _build_user_vector(perfil: dict) -> list[float]:
 def _build_animal_vector(a: dict) -> list[float]:
     especie = str(a.get("especie") or "").lower()
     porte = str(a.get("porte") or "").lower()
-
+    
     idade_raw = str(a.get("idade") or "0")
     try:
         n = float(idade_raw.split()[0].replace(",", "."))
@@ -119,6 +141,9 @@ def _build_animal_vector(a: dict) -> list[float]:
     except Exception:
         idade = idade_raw.lower()
 
+    #  TIPO DE MORADIA
+    # Se usuário mora em ap (0.0), prefere Gato ou Pequeno (0.0)
+    # Se usuário mora em Casa (1.0), prefere Médio/Grande (0.5 a 1.0)
     if especie == "gato" or porte == "pequeno":
         v0 = 0.0
     elif porte == "medio" or "médio" in porte:
@@ -126,13 +151,15 @@ def _build_animal_vector(a: dict) -> list[float]:
     else:
         v0 = 1.0
 
-    if idade == "idoso":
-        v1 = 0.0
-    elif idade == "adulto":
-        v1 = 0.5
-    else:
-        v1 = 1.0
+    # CRIANÇAS 
+    # Se o animal é bom com crianças -> 1.0
+    # Se não é (ou não sabemos) -> 0.0
+    bom_com_criancas = to_bool_like(a.get("bom_com_criancas"))
+    v1 = 1.0 if bom_com_criancas else 0.0
 
+    # TEMPO DISPONÍVEL 
+    # usuario com pouco tempo (0.0) -> Gato (0.0)
+    # usuario com muito tempo (1.0) -> Filhote ou Cachorro (1.0)
     if especie == "gato":
         v2 = 0.0
     elif idade == "filhote" or especie == "cachorro":
@@ -140,6 +167,9 @@ def _build_animal_vector(a: dict) -> list[float]:
     else:
         v2 = 0.5
 
+    #  ESTILO DE VIDA 
+    # usuario calmo (0.0) -> evita agitação
+    # usuario ativo (1.0) -> quer cachorro ou filhote (1.0)
     if especie == "cachorro" or idade == "filhote":
         v3 = 1.0
     else:
@@ -167,6 +197,11 @@ def get_perfil_adotante():
                 (uid,),
             )
             row = cur.fetchone()
+
+    # Normaliza tem_criancas para 0/1/null
+    if row and "tem_criancas" in row:
+        row["tem_criancas"] = _normalize_to_int_bool(row.get("tem_criancas"))
+
     return jsonify({"ok": True, "perfil": row})
 
 
@@ -368,7 +403,7 @@ def get_animal(aid: int):
     if not row:
         return _json_error("not found", 404)
     if "bom_com_criancas" in row:
-        row["bom_com_criancas"] = bool(row["bom_com_criancas"])
+        row["bom_com_criancas"] = _normalize_to_int_bool(row.get("bom_com_criancas"))
     if row and row.get("adotado_em") is not None:
         try:
             row["adotado_em"] = row["adotado_em"].isoformat()
@@ -440,6 +475,7 @@ def update_animal(aid: int):
             )
     return jsonify({"ok": True})
 
+
 # DELETE ANIMAL
 @bp_api.delete("/animais/<int:aid>")
 def delete_animal(aid: int):
@@ -489,7 +525,7 @@ def recomendacoes():
     n = int(request.args.get("n") or 6)
     uid = _require_auth()
 
-    # --- fallback quando não autenticado
+    # fallback quando não autenticado
     if not uid:
         conn = db_ext.get_conn()
         try:
@@ -507,6 +543,8 @@ def recomendacoes():
                 (n,),
             )
             rows = cur.fetchall() or []
+
+            # normaliza/limit em função do tipo de cursor
             if rows and isinstance(rows[0], dict):
                 limited = rows[:n]
             else:
@@ -529,6 +567,7 @@ def recomendacoes():
                         d["nome"] = r[1] if len(r) > 1 else None
                         normalized.append(d)
                 limited = normalized[:n]
+
             try:
                 cur.close()
             except Exception:
@@ -539,7 +578,7 @@ def recomendacoes():
             except Exception:
                 pass
 
-        return jsonify(_rows_to_payload(limited, []))
+        return jsonify(_rows_to_payload(limited[:n], []))
 
     # se autenticado, busca perfil 
     with db_ext.db() as conn:
@@ -554,6 +593,9 @@ def recomendacoes():
                 (uid,),
             )
             perfil = cur.fetchone()
+
+    if perfil and "tem_criancas" in perfil:
+        perfil["tem_criancas"] = _normalize_to_int_bool(perfil.get("tem_criancas"))
 
     if not perfil:
         # sem perfil -> fallback simples
@@ -572,7 +614,7 @@ def recomendacoes():
                     (n,),
                 )
                 rows = cur.fetchall() or []
-        return jsonify(_rows_to_payload(rows, []))
+        return jsonify(_rows_to_payload(rows[:n], []))
 
     # se tem perfil -> pega todos os animais e processa IA
     with db_ext.db() as conn:
@@ -642,6 +684,7 @@ def recomendacoes():
     return jsonify(_rows_to_payload(top, ids))
 
 # marcar/desmarcar adotado_em
+
 @bp_api.patch("/animais/<int:aid>/adopt")
 def adopt_animal(aid: int):
     uid = _require_auth()
@@ -653,24 +696,30 @@ def adopt_animal(aid: int):
     if action not in ("mark", "undo"):
         return _json_error("invalid_action")
 
-    conn = db_ext.get_conn()
+    conn = None
+    cur = None
+    cur2 = None
     try:
+        conn = db_ext.get_conn()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
         owner = cur.fetchone()
+
         if not owner:
-            cur.close()
             return _json_error("not found", 404)
 
         if int(owner.get("doador_id") or 0) != int(uid):
-            cur.close()
             return _json_error("forbidden", 403)
 
         if action == "mark":
             cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
         else:
             cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
-        cur.close()
+
+        try:
+            conn.commit()
+        except Exception:
+            pass
 
         cur2 = conn.cursor(dictionary=True)
         cur2.execute(
@@ -685,10 +734,28 @@ def adopt_animal(aid: int):
             (aid,),
         )
         row = cur2.fetchone()
-        cur2.close()
+
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("ERROR adopt_animal:", str(e))
+        print(tb)
+        return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
+
     finally:
         try:
-            conn.close()
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if cur2:
+                cur2.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
         except Exception:
             pass
 
@@ -701,7 +768,11 @@ def adopt_animal(aid: int):
         except Exception:
             row["adotado_em"] = str(row["adotado_em"])
 
+    if "bom_com_criancas" in row:
+        row["bom_com_criancas"] = _normalize_to_int_bool(row.get("bom_com_criancas"))
+
     return jsonify({"ok": True, "animal": _row_to_animal(row)})
+
 
 # MÉTRICAS DE ADOÇÃO
 

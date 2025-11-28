@@ -1,5 +1,6 @@
 const API_BASE = '/api';
 
+
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
   const res = await fetch(API_BASE + path, {
     method,
@@ -11,13 +12,32 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
-  const data = await res.json().catch(() => ({}));
+  // tenta json; se não for JSON, pega o text
+  let data = {};
+  let text = '';
+  try {
+    data = await res.json();
+  } catch (e) {
+    try {
+      text = await res.text();
+    } catch (e2) {
+      text = '';
+    }
+  }
+
   if (!res.ok) {
-    const msg = data.error || data.message || `Erro ${res.status}`;
-    throw new Error(msg);
+    // monta mensagem completa para debugging (status + possible JSON error + raw text)
+    const msg = data?.error || data?.message || (text ? text : `Erro ${res.status}`);
+    const err = new Error(msg);
+    // adiciona detalhes ao error object para inspeção no catch
+    err.httpStatus = res.status;
+    err.httpData = data;
+    err.httpText = text;
+    throw err;
   }
   return data;
 }
+
 
 export function apiGet(path) {
   return apiFetch(path);
