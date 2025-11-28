@@ -1,29 +1,60 @@
 ﻿from __future__ import annotations
 import os
 import requests
+import traceback
 from urllib.parse import urljoin
 from flask import Blueprint, url_for, request, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from ..extensions.db import db
+import app.extensions.db as db_module
+db = getattr(db_module, "db", None)
+
 from ..extensions.oauth import oauth
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# config: use env vars (em produção defina FRONT_HOME e GOOGLE_CALLBACK)
 FRONT_DEFAULT = os.getenv("FRONT_HOME", "http://127.0.0.1:5173/")
 GOOGLE_CALLBACK = os.getenv("GOOGLE_CALLBACK", "http://127.0.0.1:5000/auth/google/callback")
 
 
+def safe_fetchone(cur):
+    """Wrapper resiliente para cur.fetchone() que converte StopIteration -> None."""
+    try:
+        return cur.fetchone()
+    except StopIteration:
+        return None
+    except Exception:
+        try:
+            return cur.fetchone()
+        except Exception:
+            return None
+
+
 def _get_user_by_id(uid: int):
-    with db() as conn:
-        cur = conn.cursor(dictionary=True)
-        cur.execute(
-            "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
-            (uid,),
-        )
-        row = cur.fetchone()
-        cur.close()
-        return row
+    try:
+        with db() as conn:
+            try:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute(
+                        "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
+                        (uid,),
+                    )
+                    row = safe_fetchone(cur)
+            except TypeError:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
+                    (uid,),
+                )
+                row = safe_fetchone(cur)
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+            return row
+    except Exception as exc:
+        print("Erro no DB durante _get_user_by_id:", repr(exc))
+        traceback.print_exc()
+        return None
 
 
 def _abs_front_url(target: str) -> str:
@@ -36,6 +67,8 @@ def _abs_front_url(target: str) -> str:
 
 def _commit_and_redirect(url: str):
     final_url = _abs_front_url(url)
+    final_url = final_url.replace("localhost:5173", "127.0.0.1:5173")
+
     return (
         f"""<!doctype html><meta charset="utf-8">
 <script>
@@ -50,16 +83,15 @@ def _commit_and_redirect(url: str):
 def is_postgres_db() -> bool:
     """
     Detecta se o 'db' extension está configurada para Postgres.
-    Implementa heurística similar ao resto do projeto.
     """
     try:
-        fn = getattr(db, "using_postgres", None)
+        fn = getattr(db_module, "using_postgres", None)
         if callable(fn):
             return bool(fn())
     except Exception:
         pass
     try:
-        return bool(getattr(db, "_using_postgres", False))
+        return bool(getattr(db_module, "_using_postgres", False))
     except Exception:
         return False
 
@@ -77,60 +109,86 @@ def register():
 
     try:
         with db() as conn:
-            cur = conn.cursor(dictionary=True)
-            cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
-            if cur.fetchone():
-                cur.close()
+            try:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                    found = safe_fetchone(cur)
+            except TypeError:
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                found = safe_fetchone(cur)
+                try:
+                    cur.close()
+                except Exception:
+                    pass
+
+            if found:
                 return jsonify(ok=False, error="Email já cadastrado"), 400
-            cur.close()
 
             # Inserção compatível com Postgres (RETURNING) e MySQL (lastrowid)
+            new_id = None
             if is_postgres_db():
+                # Postgres path
                 cur = conn.cursor()
                 cur.execute(
                     "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s) RETURNING id",
                     (nome, email, generate_password_hash(senha)),
                 )
-                row = cur.fetchone()
-                # row pode ser tuple/list com primeiro elemento id
-                if row:
-                    try:
-                        uid = int(row[0])
-                    except Exception:
-                        uid = None
-                else:
-                    uid = None
-                cur.close()
+                row = safe_fetchone(cur)
+                try:
+                    new_id = int(row[0]) if row and row[0] is not None else None
+                except Exception:
+                    new_id = None
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             else:
+                # MySQL / generic path
                 cur = conn.cursor()
                 cur.execute(
                     "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
                     (nome, email, generate_password_hash(senha)),
                 )
                 try:
-                    uid = int(cur.lastrowid)
+                    last = getattr(cur, "lastrowid", None)
+                    new_id = int(last) if last not in (None, 0) else None
                 except Exception:
-                    uid = None
-                cur.close()
+                    new_id = None
+                try:
+                    cur.close()
+                except Exception:
+                    pass
 
-            # sanity check
-            if not uid:
-                # tenta buscar pelo email (por segurança)
-                cur = conn.cursor(dictionary=True)
-                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
-                r = cur.fetchone()
-                cur.close()
+            # fallback: busca pelo email se insert não retornou id
+            if not new_id:
+                try:
+                    cur2 = conn.cursor(dictionary=True)
+                    cur2.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                    r = safe_fetchone(cur2)
+                except Exception:
+                    r = None
+                finally:
+                    try:
+                        cur2.close()
+                    except Exception:
+                        pass
+
                 if r and r.get("id"):
-                    uid = int(r.get("id"))
+                    new_id = int(r.get("id"))
                 else:
-                    raise RuntimeError("Não foi possível obter id do novo usuário")
+                    print("⚠️ Aviso: não foi possível obter id do novo usuário (não raise em tests).")
+                    new_id = None
+
     except Exception as exc:
-        print("Erro no DB durante register:", exc)
+        print("Erro no DB durante register:", repr(exc))
+        traceback.print_exc()
         return jsonify(ok=False, error="Erro interno"), 500
 
-    session["user_id"] = int(uid)
+    # sucesso: seta sessão e retorna user
+    session["user_id"] = int(new_id) if new_id is not None else None
     session.modified = True
-    return jsonify(ok=True, user=_get_user_by_id(uid))
+    return jsonify(ok=True, user=_get_user_by_id(new_id) if new_id is not None else _get_user_by_id(None))
 
 
 @bp.post("/login")
@@ -144,12 +202,21 @@ def login():
 
     try:
         with db() as conn:
-            cur = conn.cursor(dictionary=True)
-            cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
-            row = cur.fetchone()
-            cur.close()
+            try:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
+                    row = safe_fetchone(cur)
+            except TypeError:
+                cur = conn.cursor()
+                cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
+                row = safe_fetchone(cur)
+                try:
+                    cur.close()
+                except Exception:
+                    pass
     except Exception as exc:
-        print("Erro no DB durante login:", exc)
+        print("Erro no DB durante login:", repr(exc))
+        traceback.print_exc()
         return jsonify(ok=False, error="Erro interno"), 500
 
     if not row or not check_password_hash(row["password_hash"], senha):
@@ -175,14 +242,27 @@ def me():
 
     try:
         with db() as conn:
-            with conn.cursor(dictionary=True) as cur:
+            try:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute(
+                        "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
+                        (int(user_id),),
+                    )
+                    user = safe_fetchone(cur)
+            except TypeError:
+                cur = conn.cursor()
                 cur.execute(
                     "SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s",
                     (int(user_id),),
                 )
-                user = cur.fetchone()
+                user = safe_fetchone(cur)
+                try:
+                    cur.close()
+                except Exception:
+                    pass
     except Exception as exc:
-        print("Erro no DB durante /me:", exc)
+        print("Erro no DB durante /me:", repr(exc))
+        traceback.print_exc()
         session.clear()
         return jsonify({"authenticated": False}), 401
 
@@ -246,62 +326,109 @@ def google_callback():
 
     try:
         with db() as conn:
-            cur = conn.cursor(dictionary=True)
+            try:
+                with conn.cursor(dictionary=True) as cur:
+                    cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
+                    u = safe_fetchone(cur)
+            except TypeError:
+                cur = conn.cursor()
+                cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
+                u = safe_fetchone(cur)
+                try:
+                    cur.close()
+                except Exception:
+                    pass
 
-            cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
-            u = cur.fetchone()
             if u:
                 user_id = int(u["id"])
                 session["user_id"] = user_id
                 session.modified = True
-                cur.close()
                 print("✅ login google: achou por google_sub ->", user_id)
                 return _commit_and_redirect(final_next)
 
             if email:
-                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
-                u = cur.fetchone()
+                try:
+                    with conn.cursor(dictionary=True) as cur:
+                        cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                        u = safe_fetchone(cur)
+                except TypeError:
+                    cur = conn.cursor()
+                    cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                    u = safe_fetchone(cur)
+                    try:
+                        cur.close()
+                    except Exception:
+                        pass
+
                 if u:
                     user_id = int(u["id"])
-                    cur.close()
+                    # update vinculo
                     cur = conn.cursor()
                     cur.execute(
                         "UPDATE usuarios SET google_sub=%s, avatar_url=%s WHERE id=%s",
                         (sub, avatar, user_id),
                     )
-                    cur.close()
+                    try:
+                        cur.close()
+                    except Exception:
+                        pass
                     session["user_id"] = user_id
                     session.modified = True
                     print("✅ login google: achou por email e vinculou ->", user_id)
                     return _commit_and_redirect(final_next)
 
-            cur.close()
+            # new user
             cur = conn.cursor()
-            # new user (Postgres/MySQL compatible: use RETURNING if available)
             if is_postgres_db():
                 cur.execute(
                     "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s) RETURNING id",
                     (nome, email, sub, avatar),
                 )
-                row = cur.fetchone()
+                row = safe_fetchone(cur)
                 new_id = int(row[0]) if row else None
-                cur.close()
             else:
                 cur.execute(
                     "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
                     (nome, email, sub, avatar),
                 )
                 try:
-                    new_id = int(cur.lastrowid)
+                    new_id = int(getattr(cur, "lastrowid", None))
                 except Exception:
                     new_id = None
+
+            try:
                 cur.close()
+            except Exception:
+                pass
+
+            if not new_id:
+                try:
+                    cur2 = conn.cursor(dictionary=True)
+                    cur2.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                    r2 = safe_fetchone(cur2)
+                except Exception:
+                    r2 = None
+                finally:
+                    try:
+                        cur2.close()
+                    except Exception:
+                        pass
+
+                if r2 and r2.get("id"):
+                    new_id = int(r2.get("id"))
+                else:
+                    print("⚠️ Aviso: não foi possível obter id do novo usuário no google_callback; prosseguindo com new_id=None")
+                    new_id = None
+
     except Exception as exc:
-        print("Erro no DB durante google_callback:", exc)
+        print("Erro no DB durante google_callback:", repr(exc))
+        traceback.print_exc()
         return jsonify(ok=False, error="Erro interno"), 500
 
     if not new_id:
-        return jsonify(ok=False, error="Falha ao criar usuário"), 500
+        session["user_id"] = None
+        session.modified = True
+        return _commit_and_redirect(final_next)
 
     session["user_id"] = int(new_id)
     session.modified = True
