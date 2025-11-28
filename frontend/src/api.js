@@ -2,7 +2,11 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
-  const res = await fetch(API_BASE + path, {
+  const fetchUrl = API_BASE.endsWith('/') && path.startsWith('/')
+    ? API_BASE.slice(0, -1) + path 
+    : API_BASE + path;
+  
+  const res = await fetch(fetchUrl, {
     method,
     credentials: 'include',
     headers: {
@@ -66,11 +70,22 @@ export const authApi = {
   logout() {
     return apiPost('/auth/logout', {});
   },
-  // redireciona para o endpoint que inicia o OAuth no backend
+  
   loginWithGoogle(nextPath) {
-    const url =
-      '/api/auth/login/google' +
+  
+    const isAbsoluteUrl = API_BASE.startsWith('http');
+    
+    let baseUrl = API_BASE;
+    if (isAbsoluteUrl) {
+        baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    }
+
+    const relativePath = '/auth/google/login'; // Rota no Flask
+    
+    const url = 
+      (isAbsoluteUrl ? baseUrl + relativePath : '/api' + relativePath) +
       (nextPath ? `?next=${encodeURIComponent(nextPath)}` : '');
+      
     window.location.href = url;
   },
 };
