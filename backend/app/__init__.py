@@ -20,16 +20,28 @@ def create_app():
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
     )
+    
+    # PEGA A URL DO VERCELL (FRONT_HOME) DAS VARIÁVEIS DE AMBIENTE
+    # O valor padrão 'http://localhost:5173' eh usado em desenvolvimento
+    # Em produção, ele pega 'https://trabalho-conclusao-curso-adoptme.vercel.app/'
+    frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173")
+    
+    allowed_origins = [
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
 
+        frontend_origin.rstrip('/'), 
+        frontend_origin, 
+    ]
+
+    # CONFIGURA O CORS COM A LISTA DE ORIGENS DINÂMICA
     CORS(
         app,
         supports_credentials=True,
-        resources={r"/*": {"origins": [
-            "http://127.0.0.1:8080",
-            "http://localhost:8080",
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-        ]}},
+        # 'allowed_origins' agora contém a URL do Vercel!
+        resources={r"/*": {"origins": allowed_origins}},
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         expose_headers=["Content-Type"],
