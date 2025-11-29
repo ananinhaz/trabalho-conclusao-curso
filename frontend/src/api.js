@@ -7,16 +7,22 @@ function joinUrl(base, path) {
 }
 
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
+    // 💡 NOVO: Pega o token do LocalStorage
+    const token = localStorage.getItem('access_token');
+
     const fetchUrl = API_BASE.endsWith('/') && path.startsWith('/')
         ? API_BASE.slice(0, -1) + path
         : API_BASE + path;
 
     const res = await fetch(fetchUrl, {
         method,
-        credentials: 'include', // ESSENCIAL para enviar cookies cross-site
+        // ❌ REMOVER: credentials: 'include', 
+        
         headers: {
             'Content-Type': 'application/json',
             ...(headers || {}),
+            // 💡 CRÍTICO: Envia o token de acesso no formato Bearer (se existir)
+            ...(token && { 'Authorization': `Bearer ${token}` }), 
         },
         body: body ? JSON.stringify(body) : undefined,
     });
@@ -33,6 +39,11 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
         }
     }
 
+    // 💡 NOVO: Adiciona a verificação de 401 para forçar o logout (token expirado)
+    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') { 
+         authApi.forceLogout();
+    }
+
     if (!res.ok) {
         const msg = data?.error || data?.message || (text ? text : `Erro ${res.status}`);
         const err = new Error(msg);
@@ -41,6 +52,14 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
         err.httpText = text;
         throw err;
     }
+    
+    // 💡 MUDANÇA: Para login e register, o body agora contém o token
+    if (path === '/auth/login' || path === '/auth/register') {
+        if (data.access_token) {
+            localStorage.setItem('access_token', data.access_token);
+        }
+    }
+    
     return data;
 }
 
@@ -63,50 +82,50 @@ export const authApi = {
         return apiGet('/auth/me');
     },
     login(email, senha) {
-        return apiPost('/auth/login', { email, senha });
+        // A lógica de armazenamento de token foi movida para apiFetch, mas 
+        // a função ainda pode retornar o 'user' para manter a interface consistente.
+        return apiPost('/auth/login', { email, senha }).then(data => data.user);
     },
     register(nome, email, senha) {
-        return apiPost('/auth/register', { nome, email, senha });
+        // A lógica de armazenamento de token foi movida para apiFetch.
+        return apiPost('/auth/register', { nome, email, senha }).then(data => data.user);
     },
     logout() {
-        return apiPost('/auth/logout', {});
+        // 💡 MUDANÇA: Logout limpa o token no cliente
+        localStorage.removeItem('access_token');
+        // Chama o endpoint do backend (que agora é no-op, mas mantém o padrão)
+        return apiPost('/auth/logout', {}); 
+    },
+    
+    // 💡 NOVO: Função de logout forçado (se o token expirar, por exemplo)
+    forceLogout() {
+        localStorage.removeItem('access_token');
+        // Opcional: Redireciona para o login
+        window.location.href = '/login'; 
     },
 
-    // 💡 MUDANÇA 2: Implementação do login com Google via Pop-up
+
     loginWithGoogle(nextPath) {
-        // rota correta no backend: /auth/login/google
+        // 💡 MUDANÇA: Retorna ao redirecionamento, removendo o pop-up
         const relativePath = '/auth/login/google';
-        const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-        let target = baseNoSlash + relativePath;
+        const isAbsolute = API_BASE.startsWith('http://') || API_BASE.startsWith('https://');
+
+        let target;
+        if (isAbsolute) {
+            const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+            target = baseNoSlash + relativePath;
+        } else {
+            target = '/api' + relativePath;
+        }
 
         if (nextPath) target += `?next=${encodeURIComponent(nextPath)}`;
 
-        // 1. Abre o pop-up com a URL do backend
-        const loginWindow = window.open(
-            target,
-            'googleLogin',
-            'width=600,height=600,scrollbars=yes,resizable=yes'
-        );
-
-        // 2. Cria um intervalo para verificar se a janela foi fechada
-        const checkLogin = setInterval(() => {
-            if (!loginWindow || loginWindow.closed) {
-                clearInterval(checkLogin);
-                
-                // 3. Ao fechar, recarrega a página de destino (Vercel)
-                // Isso força o Frontend a fazer a requisição /auth/me usando o cookie recém-criado.
-                if (nextPath) {
-                    window.location.href = nextPath;
-                } else {
-                    window.location.reload();
-                }
-            }
-        }, 500);
+        // 💡 CRÍTICO: Redireciona na mesma janela
+        window.location.href = target;
     },
 };
 
 // ... (Resto do api.js sem alteração)
-// perfil adotante
 export const perfilApi = {
     get() {
         return apiGet('/perfil_adotante');
