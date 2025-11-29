@@ -11,3 +11,4 @@ Flask-Login==0.6.3
 requests>=2.31.0
 psycopg2-binary>=2.9
 gunicorn
+flask-jwt-extended
