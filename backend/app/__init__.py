@@ -5,8 +5,10 @@ from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
 
+# Extensões globais
 db = SQLAlchemy()
 migrate = Migrate()
+
 
 def create_app():
     app = Flask(__name__)
@@ -39,7 +41,7 @@ def create_app():
          }},
          supports_credentials=False,
          expose_headers=["Authorization"]
-    )
+         )
 
     # Inicializações
     db.init_app(app)
@@ -49,10 +51,16 @@ def create_app():
     # -------------------------
     # BLUEPRINTS
     # -------------------------
-    from .auth_controller import auth_bp
-    from .animais_controller import animais_bp
-    from .perfil_controller import perfil_bp
+    # IMPORTA *DOS CONTROLLERS*, pois estão em backend/app/controllers/
+    try:
+        from .controllers.auth_controller import auth_bp
+        from .controllers.animais_controller import animais_bp
+        from .controllers.perfil_controller import perfil_bp
+    except Exception as e:
+        print("ERRO AO IMPORTAR CONTROLLERS:", e)
+        raise
 
+    # Registro dos blueprints
     app.register_blueprint(auth_bp, url_prefix="/api")
     app.register_blueprint(animais_bp, url_prefix="/api")
     app.register_blueprint(perfil_bp, url_prefix="/api")
