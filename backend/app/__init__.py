@@ -2,7 +2,7 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
-# 💡 NOVO: Importe o ProxyFix
+# IMPORTANTE: Mantenha o ProxyFix
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .health import health_bp
@@ -12,24 +12,26 @@ def create_app():
 
     app = Flask(__name__)
     
-    # 💡 CORREÇÃO CRÍTICA PARA AMBIENTES DE PRODUÇÃO (RENDER, HEROKU, etc)
-    # Informa ao Flask para confiar nos cabeçalhos de proxy (X-Forwarded-Proto) 
-    # e reconhecer que a requisição é HTTPS, o que é essencial para cookies seguros.
+    # CRÍTICO: Informa ao Flask que está atrás de um proxy HTTPS (Render).
+    # Essencial para que o SESSION_COOKIE_SECURE=True funcione.
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
     # FRONT_HOME configurado (frontend) — usado no CORS e para decidir cookie secure
     frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173").rstrip('/')
 
-    # Detecta se estamos em ambiente local (http) ou produção (https)
+    # Detecção de ambiente segura: considera HTTPS (Produção) e ambiente local.
     is_local_frontend = frontend_origin.startswith("http://localhost") or frontend_origin.startswith("http://127.0.0.1")
+    
+    # 💡 LÓGICA REFORÇADA: Força as flags de segurança se a URL for HTTPS ou se não for ambiente local
+    is_secure_needed = frontend_origin.startswith("https://") or (not is_local_frontend)
 
-    # Em produção (Render/Vercel) devemos usar Secure=True e SameSite=None para que cookies cross-site funcionem
-    session_cookie_secure = not is_local_frontend
-    session_cookie_samesite = "None" if session_cookie_secure else "Lax"
+    # Em ambiente seguro (HTTPS/Produção), usamos SameSite=None e Secure=True
+    session_cookie_secure = is_secure_needed
+    session_cookie_samesite = "None" if is_secure_needed else "Lax"
 
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
-        # Configurações de Cookie de Sessão
+        # CONFIGURAÇÕES FINAIS DE COOKIE (CRÍTICAS PARA CORS/PRODUÇÃO)
         SESSION_COOKIE_SAMESITE=session_cookie_samesite,
         SESSION_COOKIE_SECURE=session_cookie_secure,
         SESSION_COOKIE_HTTPONLY=True,

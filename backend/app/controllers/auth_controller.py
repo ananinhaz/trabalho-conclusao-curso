@@ -3,7 +3,8 @@ import os
 import requests
 import traceback
 from urllib.parse import urljoin
-from flask import Blueprint, url_for, request, session, jsonify
+# 💡 IMPORTANTE: 'redirect' deve estar aqui!
+from flask import Blueprint, url_for, request, session, jsonify, redirect
 from werkzeug.security import generate_password_hash, check_password_hash
 import app.extensions.db as db_module
 db = getattr(db_module, "db", None)
@@ -65,19 +66,18 @@ def _abs_front_url(target: str) -> str:
     return urljoin(FRONT_DEFAULT, target.lstrip("/"))
 
 
+# 💡 FUNÇÃO DE REDIRECIONAMENTO CORRIGIDA (HTTP 302)
 def _commit_and_redirect(url: str):
+    """
+    Substitui o redirecionamento baseado em JS/HTML por um redirecionamento HTTP 302
+    usando flask.redirect. Isso é crucial para o fluxo do OAuth e cookies cross-site.
+    """
     final_url = _abs_front_url(url)
+    
+    # Esta linha pode ser mantida para compatibilidade em ambiente de desenvolvimento local
     final_url = final_url.replace("localhost:5173", "127.0.0.1:5173")
 
-    return (
-        f"""<!doctype html><meta charset="utf-8">
-<script>
-  setTimeout(function(){{ window.location.replace("{final_url}"); }}, 200);
-</script>
-<p>Autenticado com sucesso. Redirecionando…</p>""",
-        200,
-        {"Content-Type": "text/html; charset=utf-8"},
-    )
+    return redirect(final_url)
 
 
 def is_postgres_db() -> bool:
