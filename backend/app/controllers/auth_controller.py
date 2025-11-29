@@ -1,7 +1,7 @@
-Ôªøfrom flask import Blueprint, request, jsonify, redirect, current_app
+from flask import Blueprint, request, jsonify, redirect, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash
-from .models import db, User
+from app.extensions.db import db
 from .oauth import oauth, safe_authorize_access_token
 import os
 
@@ -15,10 +15,10 @@ def register():
     data = request.get_json()
 
     if not data.get("email") or not data.get("senha") or not data.get("nome"):
-        return jsonify(error="Campos obrigat√≥rios faltando"), 400
+        return jsonify(error="Campos obrigatÛrios faltando"), 400
 
     if User.query.filter_by(email=data["email"]).first():
-        return jsonify(error="Email j√° registrado"), 400
+        return jsonify(error="Email j· registrado"), 400
 
     user = User(
         nome=data["nome"],
@@ -42,7 +42,7 @@ def login():
     
     user = User.query.filter_by(email=data.get("email")).first()
     if not user or not check_password_hash(user.senha, data.get("senha")):
-        return jsonify(error="Credenciais inv√°lidas"), 401
+        return jsonify(error="Credenciais inv·lidas"), 401
 
     token = create_access_token(identity=user.id)
     return jsonify(ok=True, user=user.to_dict(), access_token=token)
@@ -70,11 +70,11 @@ def google_callback():
     user_info = oauth.google.get("userinfo").json()
     email = user_info["email"]
 
-    # Se o usu√°rio n√£o existir ‚Üí cria
+    # Se o usu·rio n„o existir ? cria
     user = User.query.filter_by(email=email).first()
     if not user:
         user = User(
-            nome=user_info.get("name", "Usu√°rio Google"),
+            nome=user_info.get("name", "Usu·rio Google"),
             email=email
         )
         user.set_password("oauth2-no-password")
@@ -87,7 +87,7 @@ def google_callback():
 
     next_path = request.args.get("next", "/animais")
 
-    # üî• Redireciona DE VOLTA para o Vercel com o token
+    # ?? Redireciona DE VOLTA para o Vercel com o token
     return redirect(f"{FRONT}/?token={jwt_token}&next={next_path}")
 
 
