@@ -6,7 +6,6 @@ from app.extensions.oauth import oauth, safe_authorize_access_token
 
 import os
 
-from app.controllers.usuario_controller import User  # <-- seu User real
 
 auth_bp = Blueprint("auth", __name__)
 
