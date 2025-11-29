@@ -1,4 +1,32 @@
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_TOKEN_KEY = 'adopt_me_jwt_token'; // Chave para armazenar o token
+
+// --- Gerenciamento de Token JWT ---
+
+function getToken() {
+    return localStorage.getItem(API_TOKEN_KEY);
+}
+
+function setToken(token) {
+    if (token) {
+        // Salva o token
+        localStorage.setItem(API_TOKEN_KEY, token);
+    } else {
+        // Remove o token (logout)
+        localStorage.removeItem(API_TOKEN_KEY);
+    }
+}
+
+// Função auxiliar para processar a resposta do Backend (login/register)
+function processJwtResponse(data) {
+    if (data.ok && data.access_token) {
+        setToken(data.access_token);
+        return { ok: true, user: data.user, access_token: data.access_token };
+    }
+    return data;
+}
+
+// --- Funções Auxiliares de Fetch ---
 
 function joinUrl(base, path) {
     if (!base.endsWith('/') && !path.startsWith('/')) return base + '/' + path;
@@ -7,23 +35,23 @@ function joinUrl(base, path) {
 }
 
 async function apiFetch(path, { method = 'GET', body, headers } = {}) {
-    // 💡 NOVO: Pega o token do LocalStorage
-    const token = localStorage.getItem('access_token');
+    const fetchUrl = joinUrl(API_BASE, path);
+    const currentToken = getToken();
 
-    const fetchUrl = API_BASE.endsWith('/') && path.startsWith('/')
-        ? API_BASE.slice(0, -1) + path
-        : API_BASE + path;
+    const fetchHeaders = {
+        'Content-Type': 'application/json',
+        ...(headers || {}),
+    };
+    
+    // 💡 CRÍTICO: Adiciona o token JWT no cabeçalho 'Authorization'
+    if (currentToken) {
+        fetchHeaders['Authorization'] = `Bearer ${currentToken}`;
+    }
 
     const res = await fetch(fetchUrl, {
         method,
-        // ❌ REMOVER: credentials: 'include', 
-        
-        headers: {
-            'Content-Type': 'application/json',
-            ...(headers || {}),
-            // 💡 CRÍTICO: Envia o token de acesso no formato Bearer (se existir)
-            ...(token && { 'Authorization': `Bearer ${token}` }), 
-        },
+        // credentials: 'include' REMOVIDO (não usamos mais cookies de sessão)
+        headers: fetchHeaders,
         body: body ? JSON.stringify(body) : undefined,
     });
 
@@ -39,93 +67,84 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
         }
     }
 
-    // 💡 NOVO: Adiciona a verificação de 401 para forçar o logout (token expirado)
-    if (res.status === 401 && path !== '/auth/login' && path !== '/auth/me') { 
-         authApi.forceLogout();
-    }
-
     if (!res.ok) {
         const msg = data?.error || data?.message || (text ? text : `Erro ${res.status}`);
         const err = new Error(msg);
-        err.httpStatus = res.status;
-        err.httpData = data;
-        err.httpText = text;
+        err.status = res.status;
         throw err;
-    }
-    
-    // 💡 MUDANÇA: Para login e register, o body agora contém o token
-    if (path === '/auth/login' || path === '/auth/register') {
-        if (data.access_token) {
-            localStorage.setItem('access_token', data.access_token);
-        }
     }
     
     return data;
 }
 
-export function apiGet(path) {
-    return apiFetch(path);
-}
-export function apiPost(path, body) {
-    return apiFetch(path, { method: 'POST', body });
-}
-export function apiPut(path, body) {
-    return apiFetch(path, { method: 'PUT', body });
-}
-export function apiDel(path) {
-    return apiFetch(path, { method: 'DELETE' });
-}
+// Funções de atalho para métodos HTTP
+const apiGet = (path, config) => apiFetch(path, { ...config, method: 'GET' });
+const apiPost = (path, body, config) => apiFetch(path, { ...config, method: 'POST', body });
+const apiPut = (path, body, config) => apiFetch(path, { ...config, method: 'PUT', body });
+const apiDel = (path, config) => apiFetch(path, { ...config, method: 'DELETE' });
 
-// auth
+
+// --- API de Autenticação (authApi) ---
+
 export const authApi = {
-    me() {
-        return apiGet('/auth/me');
+    // Salva o token
+    async register(nome, email, senha) {
+        const res = await apiPost('/auth/register', { nome, email, senha });
+        return processJwtResponse(res);
     },
-    login(email, senha) {
-        // A lógica de armazenamento de token foi movida para apiFetch, mas 
-        // a função ainda pode retornar o 'user' para manter a interface consistente.
-        return apiPost('/auth/login', { email, senha }).then(data => data.user);
+
+    // Salva o token
+    async login(email, senha) {
+        const res = await apiPost('/auth/login', { email, senha });
+        return processJwtResponse(res);
     },
-    register(nome, email, senha) {
-        // A lógica de armazenamento de token foi movida para apiFetch.
-        return apiPost('/auth/register', { nome, email, senha }).then(data => data.user);
+
+    // Limpa o token localmente
+    async logout() {
+        setToken(null);
+        return apiPost('/auth/logout'); 
     },
-    logout() {
-        // 💡 MUDANÇA: Logout limpa o token no cliente
-        localStorage.removeItem('access_token');
-        // Chama o endpoint do backend (que agora é no-op, mas mantém o padrão)
-        return apiPost('/auth/logout', {}); 
+
+    async me() {
+        // Se não houver token, retorna que não está autenticado imediatamente
+        if (!getToken()) {
+            return { authenticated: false };
+        }
+        
+        // A apiFetch inclui o Authorization header
+        const res = await apiGet('/auth/me');
+        return res;
     },
     
-    // 💡 NOVO: Função de logout forçado (se o token expirar, por exemplo)
-    forceLogout() {
-        localStorage.removeItem('access_token');
-        // Opcional: Redireciona para o login
-        window.location.href = '/login'; 
-    },
+    // CRÍTICO para Login com Google
+    handleGoogleCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        if (token) {
+            setToken(token);
+            urlParams.delete('token');
+            
+            const nextPath = urlParams.get('next') || '/animais';
+            urlParams.delete('next');
+            
+            const newUrl = window.location.pathname + (urlParams.toString() ? `?${urlParams.toString()}` : '');
+            
+            // Substitui a URL no histórico (limpando o token)
+            window.history.replaceState(null, '', newUrl);
 
-
-    loginWithGoogle(nextPath) {
-        // 💡 MUDANÇA: Retorna ao redirecionamento, removendo o pop-up
-        const relativePath = '/auth/login/google';
-        const isAbsolute = API_BASE.startsWith('http://') || API_BASE.startsWith('https://');
-
-        let target;
-        if (isAbsolute) {
-            const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-            target = baseNoSlash + relativePath;
-        } else {
-            target = '/api' + relativePath;
+            // Redireciona para o `next`
+            window.location.href = nextPath;
+            
+            return true;
         }
-
-        if (nextPath) target += `?next=${encodeURIComponent(nextPath)}`;
-
-        // 💡 CRÍTICO: Redireciona na mesma janela
-        window.location.href = target;
-    },
+        
+        return false;
+    }
 };
 
-// ... (Resto do api.js sem alteração)
+// --- Outras APIs ---
+
 export const perfilApi = {
     get() {
         return apiGet('/perfil_adotante');
@@ -159,15 +178,6 @@ export const animaisApi = {
         return apiDel(`/animais/${id}`);
     },
     adopt(id, { action = 'mark' } = {}) {
-        return apiFetch(`/animais/${id}/adopt`, { method: 'PATCH', body: { action } });
-    },
-    adoptionMetrics(days = 7) {
-        return apiGet(`/animais/metrics/adoptions?days=${days}`);
-    },
-};
-
-export const recApi = {
-    list(n = 12) {
-        return apiGet(`/recomendacoes?n=${n}`);
+        return apiPost(`/animais/${id}/adotar`, { action });
     },
 };
