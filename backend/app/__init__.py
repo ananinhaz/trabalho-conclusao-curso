@@ -24,6 +24,7 @@ def create_app():
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
         SESSION_COOKIE_SAMESITE=session_cookie_samesite,
         SESSION_COOKIE_SECURE=session_cookie_secure,
+        SESSION_COOKIE_HTTPONLY=True,
         SESSION_PERMANENT=False,
 
         SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL"),
@@ -49,12 +50,6 @@ def create_app():
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         expose_headers=["Content-Type"],
     )
-
-    @app.before_request
-    def _preflight():
-        # responde rapidamente às preflight OPTIONS
-        if request.method == "OPTIONS":
-            return app.make_response(("", 200))
 
     # extensões
     from .extensions.oauth import init_oauth
