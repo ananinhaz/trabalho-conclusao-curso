@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify, redirect, current_app
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash
 from app.extensions.db import db
-from app.oauth import oauth, safe_authorize_access_token
+from app.extensions.oauth import oauth, safe_authorize_access_token
+
 import os
 
 from app.controllers.usuario_controller import User  # <-- seu User real
