@@ -4,8 +4,6 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_cors import CORS
-from .controllers.auth_controller import auth_bp
-# ... outros imports ...
 
 # Extensões globais
 db = SQLAlchemy()
@@ -37,13 +35,12 @@ def create_app():
     # -------------------------
     # CORS (ESSENCIAL PARA JWT)
     # -------------------------
-    CORS(app,
-         resources={r"/api/*": {
-             "origins": [FRONT_HOME],
-         }},
-         supports_credentials=False,
-         expose_headers=["Authorization"]
-         )
+    CORS(
+        app,
+        resources={r"/api/*": {"origins": [FRONT_HOME]}},
+        supports_credentials=False,
+        expose_headers=["Authorization"]
+    )
 
     # Inicializações
     db.init_app(app)
@@ -53,13 +50,13 @@ def create_app():
     # -------------------------
     # BLUEPRINTS
     # -------------------------
-    # IMPORTA *DOS CONTROLLERS*, pois estão em backend/app/controllers/
     try:
+        # IMPORTES QUE EXISTEM DE VERDADE
         from .controllers.auth_controller import auth_bp
-        from .controllers.animais_controller import animais_bp
+        from .controllers.animal_controller import animais_bp   # <---- CORRIGIDO
         from .controllers.perfil_controller import perfil_bp
     except Exception as e:
-        print("ERRO AO IMPORTAR CONTROLLERS:", e)
+        print("\n\nERRO AO IMPORTAR CONTROLLERS:", e, "\n\n")
         raise
 
     # Registro dos blueprints
