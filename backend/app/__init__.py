@@ -22,7 +22,7 @@ def create_app():
     # Detecção de ambiente segura: considera HTTPS (Produção) e ambiente local.
     is_local_frontend = frontend_origin.startswith("http://localhost") or frontend_origin.startswith("http://127.0.0.1")
     
-    # 💡 LÓGICA REFORÇADA: Força as flags de segurança se a URL for HTTPS ou se não for ambiente local
+    # LÓGICA REFORÇADA: Força as flags de segurança se a URL for HTTPS ou se não for ambiente local
     is_secure_needed = frontend_origin.startswith("https://") or (not is_local_frontend)
 
     # Em ambiente seguro (HTTPS/Produção), usamos SameSite=None e Secure=True
@@ -35,7 +35,10 @@ def create_app():
         SESSION_COOKIE_SAMESITE=session_cookie_samesite,
         SESSION_COOKIE_SECURE=session_cookie_secure,
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_PERMANENT=False,
+        
+        # 💡 MUDANÇA 1: Torna a sessão permanente e define um tempo de vida explícito (7 dias)
+        SESSION_PERMANENT=True,
+        PERMANENT_SESSION_LIFETIME=3600 * 24 * 7, # 7 dias
 
         SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL"),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
