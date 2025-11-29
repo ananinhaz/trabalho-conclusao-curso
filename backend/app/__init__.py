@@ -2,6 +2,8 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from dotenv import load_dotenv
+# 💡 NOVO: Importe o ProxyFix
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .health import health_bp
 
@@ -9,6 +11,11 @@ def create_app():
     load_dotenv()
 
     app = Flask(__name__)
+    
+    # 💡 CORREÇÃO CRÍTICA PARA AMBIENTES DE PRODUÇÃO (RENDER, HEROKU, etc)
+    # Informa ao Flask para confiar nos cabeçalhos de proxy (X-Forwarded-Proto) 
+    # e reconhecer que a requisição é HTTPS, o que é essencial para cookies seguros.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1, x_prefix=1)
 
     # FRONT_HOME configurado (frontend) — usado no CORS e para decidir cookie secure
     frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173").rstrip('/')
@@ -16,12 +23,13 @@ def create_app():
     # Detecta se estamos em ambiente local (http) ou produção (https)
     is_local_frontend = frontend_origin.startswith("http://localhost") or frontend_origin.startswith("http://127.0.0.1")
 
-    # Em produção devemos usar Secure=True e SameSite=None para que cookies cross-site funcionem
+    # Em produção (Render/Vercel) devemos usar Secure=True e SameSite=None para que cookies cross-site funcionem
     session_cookie_secure = not is_local_frontend
     session_cookie_samesite = "None" if session_cookie_secure else "Lax"
 
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
+        # Configurações de Cookie de Sessão
         SESSION_COOKIE_SAMESITE=session_cookie_samesite,
         SESSION_COOKIE_SECURE=session_cookie_secure,
         SESSION_COOKIE_HTTPONLY=True,
@@ -44,7 +52,7 @@ def create_app():
     # CORS: permita credenciais e somente o frontend
     CORS(
         app,
-        supports_credentials=True,
+        supports_credentials=True, # ESSENCIAL para enviar cookies de sessão
         resources={r"/*": {"origins": allowed_origins}},
         allow_headers=["Content-Type", "Authorization"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
