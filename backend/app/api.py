@@ -1,26 +1,35 @@
+# api.py
 from __future__ import annotations
-from flask import Blueprint, request, jsonify, session
-import numpy as np
-from sklearn.metrics.pairwise import pairwise_distances
-from datetime import datetime, timedelta
+from flask import Blueprint, request, jsonify, session, current_app
+import os
 import base64
 import json
 from typing import Optional
+from datetime import datetime, timedelta
+
+import numpy as np
+from sklearn.metrics.pairwise import pairwise_distances
 
 from .extensions import db as db_ext
 
+# opcional: pyjwt para validação de token (se JWT_SECRET definido)
+try:
+    import jwt as pyjwt
+except Exception:
+    pyjwt = None
+
 bp_api = Blueprint("api", __name__)
 
-# IA — PESOS
+# --- IA — PESOS (conforme TCC) ---
 VEC_WEIGHTS = np.array([
-    1.0,
-    1.0,
-    5.0,
-    1.0
+    1.0,  # moradia / porte/especie
+    1.0,  # bom_com_criancas
+    5.0,  # tempo disponível (peso maior)
+    1.0   # estilo de vida
 ])
 
+# --- utilitários db / ambiente ---------------------------------------------
 def is_postgres() -> bool:
-    """Detecta se o backend está usando Postgres (compatível com os testes)."""
     try:
         fn = getattr(db_ext, "using_postgres", None)
         if callable(fn):
@@ -32,37 +41,43 @@ def is_postgres() -> bool:
     except Exception:
         return False
 
+# --- JWT helpers -----------------------------------------------------------
+JWT_SECRET = os.environ.get("JWT_SECRET")
+JWT_ALGS = ["HS256"]
 
 def _decode_jwt_payload_no_verify(token: str) -> dict:
-    """
-    Decodifica o payload de um JWT sem verificar assinatura.
-    Retorna dict vazio se não for possível.
-    """
+    """Decodifica payload de JWT sem validar assinatura (fallback)."""
     try:
-        parts = token.split('.')
+        parts = token.split(".")
         if len(parts) != 3:
             return {}
-        payload_b64 = parts[1]
-        # Ajuste de padding
-        rem = len(payload_b64) % 4
-        if rem > 0:
-            payload_b64 += '=' * (4 - rem)
-        payload_bytes = base64.urlsafe_b64decode(payload_b64.encode('utf-8'))
-        payload_json = payload_bytes.decode('utf-8')
-        return json.loads(payload_json)
+        b64 = parts[1]
+        rem = len(b64) % 4
+        if rem:
+            b64 += "=" * (4 - rem)
+        payload = base64.urlsafe_b64decode(b64.encode("utf-8"))
+        return json.loads(payload.decode("utf-8"))
     except Exception:
         return {}
 
+def _validate_and_get_payload(token: str) -> dict:
+    """Se JWT_SECRET disponível e pyjwt instalado, valida e retorna payload; senão tenta no-verify."""
+    if JWT_SECRET and pyjwt:
+        try:
+            payload = pyjwt.decode(token, JWT_SECRET, algorithms=JWT_ALGS)
+            return payload or {}
+        except Exception:
+            return {}
+    # fallback
+    return _decode_jwt_payload_no_verify(token)
 
 def _require_auth() -> Optional[int]:
     """
-    Tenta obter o user id:
-     1) da session (session['user_id'])
-     2) do header Authorization: Bearer <token> (decodificando payload do JWT)
-     3) se o token for só um número, usa ele direto
-    Retorna int(uid) ou None.
+    Obtém user id do contexto:
+     1) session['user_id']
+     2) Authorization: Bearer <token> (valida se possível, senão decodifica)
+     3) se token for só dígitos aceita como id (legacy)
     """
-    # 1) session (padrão)
     uid = session.get("user_id")
     if uid:
         try:
@@ -70,71 +85,62 @@ def _require_auth() -> Optional[int]:
         except Exception:
             pass
 
-    # 2) Authorization header
     auth = request.headers.get("Authorization") or request.headers.get("authorization")
-    if auth:
-        parts = auth.split()
-        if len(parts) == 2 and parts[0].lower() == "bearer":
-            token = parts[1].strip()
-            # se o token for apenas dígitos, retorne direto
-            if token.isdigit():
+    if not auth:
+        return None
+    parts = auth.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    token = parts[1].strip()
+    if token.isdigit():
+        try:
+            return int(token)
+        except Exception:
+            pass
+    payload = _validate_and_get_payload(token)
+    if not payload:
+        return None
+    # checa claims comuns
+    for k in ("user_id", "userid", "uid", "sub", "id", "usuario_id"):
+        if k in payload and payload[k] is not None:
+            try:
+                return int(payload[k])
+            except Exception:
                 try:
-                    return int(token)
+                    return int(str(payload[k]))
                 except Exception:
                     pass
-            # tenta decodificar jwt e extrair claims comuns
-            payload = _decode_jwt_payload_no_verify(token)
-            if payload:
-                # procura chaves comuns que podem armazenar user id
-                for k in ("user_id", "userid", "uid", "sub", "id", "usuario_id"):
-                    if k in payload and payload[k] is not None:
-                        try:
-                            return int(payload[k])
-                        except Exception:
-                            # se não for int, tente extrair números
-                            try:
-                                return int(str(payload[k]))
-                            except Exception:
-                                pass
     return None
 
-
+# --- normalizações ---------------------------------------------------------
 def to_bool_like(v):
-    """Normaliza valores vindos do front/testes para boolean."""
     if isinstance(v, bool):
         return v
     if v is None:
         return False
     s = str(v).strip().lower()
-    if s in ("1", "true", "t", "yes", "y"):
+    if s in ("1", "true", "t", "yes", "y", "s", "sim"):
         return True
     return False
 
-
 def _normalize_to_int_bool(v):
-    """Converte valores booleanos/t/f/1/0 para 1/0 ou None se v is None."""
     if v is None:
         return None
+    if isinstance(v, bool):
+        return 1 if v else 0
     try:
-        # Se já é bool
-        if isinstance(v, bool):
-            return 1 if v else 0
-        # números
         if isinstance(v, (int, float)):
             return 1 if int(v) != 0 else 0
         s = str(v).strip().lower()
-        if s in ("1", "true", "t", "yes", "y"):
+        if s in ("1", "true", "t", "yes", "y", "s", "sim"):
             return 1
         return 0
     except Exception:
         return None
 
-
 def _row_to_animal(row: dict) -> dict:
-    """Normaliza saída de animal para o front."""
     bom = row.get("bom_com_criancas")
     bom_val = _normalize_to_int_bool(bom)
-
     return {
         "id": row.get("id"),
         "nome": row.get("nome"),
@@ -154,93 +160,109 @@ def _row_to_animal(row: dict) -> dict:
         "adotado_em": row.get("adotado_em"),
     }
 
-
 def _json_error(msg: str, code: int = 400):
     return jsonify({"ok": False, "error": msg}), code
-
 
 def _rows_to_payload(rows, ids):
     return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
 
-
-# IA — VETORES
-
+# --- IA: vetorização conforme TCC -----------------------------------------
 def _build_user_vector(perfil: dict) -> list[float]:
-    tm = (perfil.get("tipo_moradia") or "").lower()
+    """
+    Vetorização do perfil do adotante conforme especificação do TCC:
+     - tipo_moradia -> tm_vec (0.0 apartamento / 1.0 casa)
+     - tem_criancas -> 0/1
+     - tempo_disponivel_horas_semana -> normalizado 0-20 -> /20 (peso grande)
+     - estilo_vida -> 0.0 calmo / 1.0 ativo / 0.5 neutro
+    """
+    tipo_moradia = (perfil.get("tipo_moradia") or "").strip().lower()
     tem_criancas = to_bool_like(perfil.get("tem_criancas"))
-    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
-    estilo = (perfil.get("estilo_vida") or "").lower()
+    # tempo pode vir "010" ou "8"
+    try:
+        tempo = int(str(perfil.get("tempo_disponivel_horas_semana") or "0").strip())
+    except Exception:
+        tempo = 0
+    estilo_raw = (perfil.get("estilo_vida") or "").strip().lower()
 
+    # tipo moradia
     tm_vec = 0.5
-    if "aparta" in tm:
+    if "aparta" in tipo_moradia or "apartamento" in tipo_moradia:
         tm_vec = 0.0
-    elif "casa" in tm or "quintal" in tm:
+    elif "casa" in tipo_moradia or "quintal" in tipo_moradia:
         tm_vec = 1.0
 
-    tempo_norm = min(tempo, 20) / 20.0
+    # tempo normalizado
+    tempo_norm = min(max(tempo, 0), 20) / 20.0
 
-    if "ativo" in estilo or "esport" in estilo:
+    # estilo de vida
+    estilo_vec = 0.5
+    if any(k in estilo_raw for k in ("ativo", "esport", "corrida", "muito", "muito tempo")):
         estilo_vec = 1.0
-    elif "tranq" in estilo or "calmo" in estilo:
+    elif any(k in estilo_raw for k in ("tranq", "calmo", "pouco", "fico pouco")):
         estilo_vec = 0.0
-    else:
+    elif "moderado" in estilo_raw:
         estilo_vec = 0.5
 
     return [tm_vec, float(tem_criancas), tempo_norm, estilo_vec]
 
-
 def _build_animal_vector(a: dict) -> list[float]:
-    especie = str(a.get("especie") or "").lower()
-    porte = str(a.get("porte") or "").lower()
-    
-    idade_raw = str(a.get("idade") or "0")
+    """
+    Vetorização do animal conforme TCC:
+     - v0 (tipo/porte/especie): gato/pequeno -> 0.0, médio -> 0.5, grande -> 1.0
+     - v1 bom_com_criancas -> 1.0/0.0
+     - v2 tempo (filhote/cachorro -> 1.0, gato -> 0.0, else 0.5)
+     - v3 estilo (cachorro/filhote -> 1.0, else 0.0)
+    """
+    especie = str(a.get("especie") or "").strip().lower()
+    porte = str(a.get("porte") or "").strip().lower()
+    idade_raw = str(a.get("idade") or "0").strip()
+
+    # idade -> categoriza filhote/adulto/idoso quando possível
     try:
         n = float(idade_raw.split()[0].replace(",", "."))
         if n <= 1:
-            idade = "filhote"
+            idade_cat = "filhote"
         elif n <= 7:
-            idade = "adulto"
+            idade_cat = "adulto"
         else:
-            idade = "idoso"
+            idade_cat = "idoso"
     except Exception:
-        idade = idade_raw.lower()
+        idade_cat = idade_raw.lower() or "adulto"
 
-    #  TIPO DE MORADIA
-    if especie == "gato" or porte == "pequeno":
+    # v0
+    if "gato" in especie or "pequeno" in porte or "pequena" in porte or "mini" in porte:
         v0 = 0.0
-    elif porte == "medio" or "médio" in porte:
+    elif "medio" in porte or "médio" in porte or "médio" in porte:
         v0 = 0.5
     else:
         v0 = 1.0
 
-    # CRIANÇAS 
+    # v1
     bom_com_criancas = to_bool_like(a.get("bom_com_criancas"))
     v1 = 1.0 if bom_com_criancas else 0.0
 
-    # TEMPO DISPONÍVEL 
-    if especie == "gato":
+    # v2
+    if "gato" in especie:
         v2 = 0.0
-    elif idade == "filhote" or especie == "cachorro":
+    elif idade_cat == "filhote" or "cachorr" in especie:
         v2 = 1.0
     else:
         v2 = 0.5
 
-    #  ESTILO DE VIDA 
-    if especie == "cachorro" or idade == "filhote":
+    # v3
+    if "cachorr" in especie or idade_cat == "filhote":
         v3 = 1.0
     else:
         v3 = 0.0
 
     return [v0, v1, v2, v3]
 
-# PERFIL DO ADOTANTE
-
+# --- Rotas: PERFIL ADOTANTE -----------------------------------------------
 @bp_api.get("/perfil_adotante")
 def get_perfil_adotante():
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
@@ -253,29 +275,25 @@ def get_perfil_adotante():
                 (uid,),
             )
             row = cur.fetchone()
-
-    # Normaliza tem_criancas para 0/1/null
     if row and "tem_criancas" in row:
         row["tem_criancas"] = _normalize_to_int_bool(row.get("tem_criancas"))
-
     return jsonify({"ok": True, "perfil": row})
-
 
 @bp_api.post("/perfil_adotante")
 def upsert_perfil_adotante():
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-
     data = request.get_json(silent=True) or {}
     tipo_moradia = (data.get("tipo_moradia") or "").strip()
     tem_criancas = to_bool_like(data.get("tem_criancas"))
-    tempo = int(data.get("tempo_disponivel_horas_semana") or 0)
+    try:
+        tempo = int(data.get("tempo_disponivel_horas_semana") or 0)
+    except Exception:
+        tempo = 0
     estilo_vida = (data.get("estilo_vida") or "").strip()
-
     if not tipo_moradia or not estilo_vida:
         return _json_error("Dados obrigatórios ausentes")
-
     with db_ext.db() as conn:
         with conn.cursor() as cur:
             if is_postgres():
@@ -310,9 +328,7 @@ def upsert_perfil_adotante():
                 )
     return jsonify({"ok": True})
 
-
-# LISTAGEM DE ANIMAIS
-
+# --- Rotas: ANIMAIS (list, create, get, update, delete, mine) -------------
 @bp_api.get("/animais")
 def list_animais():
     especie = request.args.get("especie") or ""
@@ -347,36 +363,26 @@ def list_animais():
                a.adotado_em
         FROM animais a
     """
-
     if where:
         sql += " WHERE " + " AND ".join(where)
-
     sql += " ORDER BY a.criado_em DESC LIMIT 200"
 
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(sql, tuple(params))
             rows = cur.fetchall() or []
-
     return jsonify([_row_to_animal(r) for r in rows])
-
-# CRIAÇÃO DE ANIMAL
 
 @bp_api.post("/animais")
 def create_animal():
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-
     data = request.get_json(silent=True) or {}
-
     def _safe_strip(v):
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return v.strip()
+        if v is None: return None
+        if isinstance(v, str): return v.strip()
         return str(v).strip()
-
     nome = _safe_strip(data.get("nome"))
     especie = _safe_strip(data.get("especie"))
     raca = _safe_strip(data.get("raca"))
@@ -389,7 +395,6 @@ def create_animal():
     donor_name = _safe_strip(data.get("donor_name"))
     donor_whatsapp = _safe_strip(data.get("donor_whatsapp"))
     energia = _safe_strip(data.get("energia"))
-
     bom_com_criancas = to_bool_like(data.get("bom_com_criancas"))
 
     if not (nome and especie and descricao and cidade):
@@ -434,10 +439,7 @@ def create_animal():
                     animal_id = cur.lastrowid
                 except Exception:
                     animal_id = None
-
     return jsonify({"ok": True, "id": animal_id})
-
-# GET /animais/<id>
 
 @bp_api.get("/animais/<int:aid>")
 def get_animal(aid: int):
@@ -466,25 +468,17 @@ def get_animal(aid: int):
             row["adotado_em"] = str(row["adotado_em"])
     return jsonify(_row_to_animal(row))
 
-
-# UPDATE ANIMAL
-
 @bp_api.put("/animais/<int:aid>")
 def update_animal(aid: int):
     uid = _require_auth()
     if not uid:
         return _json_error("unauthenticated", 401)
-
     data = request.get_json(silent=True) or {}
     adotado_em = data.get("adotado_em")
-
     def _safe_strip_val(v):
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return v.strip()
+        if v is None: return None
+        if isinstance(v, str): return v.strip()
         return str(v).strip()
-
     nome = _safe_strip_val(data.get("nome"))
     especie = _safe_strip_val(data.get("especie"))
     raca = data.get("raca")
@@ -495,7 +489,6 @@ def update_animal(aid: int):
     photo_url = _safe_strip_val(data.get("photo_url"))
     energia = data.get("energia")
     bom_com_criancas = to_bool_like(data.get("bom_com_criancas"))
-
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute("SELECT * FROM animais WHERE id=%s", (aid,))
@@ -504,7 +497,6 @@ def update_animal(aid: int):
                 return _json_error("not found", 404)
             if int(owner.get("doador_id") or 0) != int(uid):
                 return _json_error("forbidden", 403)
-
             if not nome: nome = owner.get('nome')
             if not especie: especie = owner.get('especie')
             if not descricao: descricao = owner.get('descricao')
@@ -512,7 +504,6 @@ def update_animal(aid: int):
             if not photo_url: photo_url = owner.get('photo_url')
             if 'adotado_em' not in data:
                 adotado_em = owner.get('adotado_em')
-
             cur.execute(
                 """
                 UPDATE animais
@@ -530,32 +521,23 @@ def update_animal(aid: int):
             )
     return jsonify({"ok": True})
 
-
-# DELETE ANIMAL
 @bp_api.delete("/animais/<int:aid>")
 def delete_animal(aid: int):
     uid = _require_auth()
-    if not uid:
-        return _json_error("unauthenticated", 401)
+    if not uid: return _json_error("unauthenticated", 401)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
             owner = cur.fetchone()
-            if not owner:
-                return _json_error("not found", 404)
-            if int(owner.get("doador_id") or 0) != int(uid):
-                return _json_error("forbidden", 403)
+            if not owner: return _json_error("not found", 404)
+            if int(owner.get("doador_id") or 0) != int(uid): return _json_error("forbidden", 403)
             cur.execute("DELETE FROM animais WHERE id=%s", (aid,))
     return jsonify({"ok": True})
-
-# ANIMAIS MINE
 
 @bp_api.get("/animais/mine")
 def animais_mine():
     uid = _require_auth()
-    if not uid:
-        return _json_error("unauthenticated", 401)
-
+    if not uid: return _json_error("unauthenticated", 401)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
@@ -573,14 +555,13 @@ def animais_mine():
             rows = cur.fetchall() or []
     return jsonify([_row_to_animal(r) for r in rows])
 
-# RECOMENDAÇÕES (IA) - FALLBACK + PERFIL + KNN
-
+# --- RECOMENDAÇÕES: rotina principal (TCC) -------------------------------
 @bp_api.get("/recomendacoes")
 def recomendacoes():
     n = int(request.args.get("n") or 6)
     uid = _require_auth()
 
-    # fallback quando não autenticado
+    # fallback: usuário não autenticado -> últimos n animais
     if not uid:
         conn = db_ext.get_conn()
         try:
@@ -598,8 +579,7 @@ def recomendacoes():
                 (n,),
             )
             rows = cur.fetchall() or []
-
-            # normaliza/limit em função do tipo de cursor
+            # normaliza cursor types
             if rows and isinstance(rows[0], dict):
                 limited = rows[:n]
             else:
@@ -617,25 +597,17 @@ def recomendacoes():
                     elif cols and len(cols) == len(r):
                         normalized.append({k: v for k, v in zip(cols, r)})
                     else:
-                        d = {}
-                        d["id"] = r[0] if len(r) > 0 else None
-                        d["nome"] = r[1] if len(r) > 1 else None
+                        d = {"id": r[0] if len(r) > 0 else None, "nome": r[1] if len(r) > 1 else None}
                         normalized.append(d)
                 limited = normalized[:n]
-
-            try:
-                cur.close()
-            except Exception:
-                pass
+            try: cur.close()
+            except Exception: pass
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
+            try: conn.close()
+            except Exception: pass
         return jsonify(_rows_to_payload(limited[:n], []))
 
-    # se autenticado, busca perfil 
+    # obtém perfil do usuário
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
@@ -653,7 +625,7 @@ def recomendacoes():
         perfil["tem_criancas"] = _normalize_to_int_bool(perfil.get("tem_criancas"))
 
     if not perfil:
-        # sem perfil -> fallback simples
+        # sem perfil -> fallback simples (últimos n)
         with db_ext.db() as conn:
             with conn.cursor(dictionary=True) as cur:
                 cur.execute(
@@ -671,7 +643,7 @@ def recomendacoes():
                 rows = cur.fetchall() or []
         return jsonify(_rows_to_payload(rows[:n], []))
 
-    # se tem perfil -> pega todos os animais e processa IA
+    # se tem perfil, pega todos os animais e aplica IA (KNN ponderado)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
@@ -685,14 +657,16 @@ def recomendacoes():
             )
             animals = cur.fetchall() or []
 
-    # filtros 
+    # aplica filtros rígidos (como no TCC)
     tm = (perfil.get("tipo_moradia") or "").lower()
-    tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
+    try:
+        tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
+    except Exception:
+        tempo = 0
 
     def _hard_ok(a):
         especie = str(a.get("especie") or "").lower()
         porte = str(a.get("porte") or "").lower()
-
         if "aparta" in tm and tempo <= 6:
             if "gato" in especie:
                 return True
@@ -712,13 +686,11 @@ def recomendacoes():
     user_vec_np = np.array([user_vec])
     animal_vectors = []
     animal_map = []
-
     for r in filtered:
         animal_vec = _build_animal_vector(r)
         if len(animal_vec) == len(VEC_WEIGHTS):
             animal_vectors.append(animal_vec)
             animal_map.append(r)
-
     X_animals = np.array(animal_vectors)
     if X_animals.size == 0:
         return jsonify(_rows_to_payload([], []))
@@ -733,24 +705,19 @@ def recomendacoes():
 
     scored = [(float(dist), animal_data) for dist, animal_data in zip(distances, animal_map)]
     scored.sort(key=lambda x: x[0])
-
     top = [a for _, a in scored[:n]]
     ids = [a["id"] for a in top]
     return jsonify(_rows_to_payload(top, ids))
 
-# marcar/desmarcar adotado_em
-
+# --- marcar/desmarcar adotado_em ------------------------------------------
 @bp_api.patch("/animais/<int:aid>/adopt")
 def adopt_animal(aid: int):
     uid = _require_auth()
-    if not uid:
-        return _json_error("unauthenticated", 401)
-
+    if not uid: return _json_error("unauthenticated", 401)
     data = request.get_json(silent=True) or {}
     action = (data.get("action") or "mark").lower()
     if action not in ("mark", "undo"):
         return _json_error("invalid_action")
-
     conn = None
     cur = None
     cur2 = None
@@ -759,23 +726,14 @@ def adopt_animal(aid: int):
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
         owner = cur.fetchone()
-
-        if not owner:
-            return _json_error("not found", 404)
-
-        if int(owner.get("doador_id") or 0) != int(uid):
-            return _json_error("forbidden", 403)
-
+        if not owner: return _json_error("not found", 404)
+        if int(owner.get("doador_id") or 0) != int(uid): return _json_error("forbidden", 403)
         if action == "mark":
             cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
         else:
             cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
-
-        try:
-            conn.commit()
-        except Exception:
-            pass
-
+        try: conn.commit()
+        except Exception: pass
         cur2 = conn.cursor(dictionary=True)
         cur2.execute(
             """
@@ -789,48 +747,33 @@ def adopt_animal(aid: int):
             (aid,),
         )
         row = cur2.fetchone()
-
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        print("ERROR adopt_animal:", str(e))
-        print(tb)
+        current_app.logger.error("ERROR adopt_animal: %s\n%s", str(e), tb)
         return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
-
     finally:
+        try: 
+            if cur: cur.close()
+        except Exception: pass
         try:
-            if cur:
-                cur.close()
-        except Exception:
-            pass
+            if cur2: cur2.close()
+        except Exception: pass
         try:
-            if cur2:
-                cur2.close()
-        except Exception:
-            pass
-        try:
-            if conn:
-                conn.close()
-        except Exception:
-            pass
-
+            if conn: conn.close()
+        except Exception: pass
     if not row:
         return _json_error("not found", 404)
-
     if row.get("adotado_em") is not None:
         try:
             row["adotado_em"] = row["adotado_em"].isoformat()
         except Exception:
             row["adotado_em"] = str(row["adotado_em"])
-
     if "bom_com_criancas" in row:
         row["bom_com_criancas"] = _normalize_to_int_bool(row.get("bom_com_criancas"))
-
     return jsonify({"ok": True, "animal": _row_to_animal(row)})
 
-
-# MÉTRICAS DE ADOÇÃO
-
+# --- metrics/adoptions -----------------------------------------------------
 @bp_api.get("/animais/metrics/adoptions")
 def adoption_metrics():
     try:
@@ -840,10 +783,8 @@ def adoption_metrics():
     if days <= 0:
         days = 7
     days = min(days, 90)
-
     end = datetime.utcnow().date()
     start = end - timedelta(days=days - 1)
-
     sql = """
         SELECT DATE(adotado_em) AS day, COUNT(*) AS cnt
           FROM animais
@@ -856,21 +797,17 @@ def adoption_metrics():
         with conn.cursor(dictionary=True) as cur:
             cur.execute(sql, (start.isoformat(), end.isoformat()))
             rows = cur.fetchall() or []
-
     counts = {
         (r["day"].isoformat() if hasattr(r["day"], "isoformat") else str(r["day"])): int(r["cnt"] or 0)
         for r in rows
     }
-
     result = []
     for i in range(days):
         d = start + timedelta(days=i)
         ds = d.isoformat()
         result.append({"day": ds, "count": counts.get(ds, 0)})
-
     return jsonify({"ok": True, "days": result})
 
-# REGISTRO DE BLUEPRINTS
+# --- registro blueprint ----------------------------------------------------
 def register_blueprints(app):
-    # monta todas as rotas deste módulo sob /api/*
     app.register_blueprint(bp_api, url_prefix="/api")
