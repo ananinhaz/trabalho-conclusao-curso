@@ -1,7 +1,6 @@
 ﻿# backend/app/controllers/auth_controller.py
 from __future__ import annotations
 import os
-import traceback
 from urllib.parse import urljoin
 
 from flask import (
@@ -19,15 +18,14 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 import app.extensions.db as db_module
 db = getattr(db_module, "db", None)
 
-from ..extensions.oauth import oauth
+# Importa o oauth (deve ser inicializado em create_app via init_oauth)
+from app.extensions.oauth import oauth
 
-bp = Blueprint("auth", __name__, url_prefix="")  # será montado em /api/auth pelo create_app()
+bp = Blueprint("auth", __name__, url_prefix="")  # registrado em /api/auth pelo create_app
 
-# Defaults; em produção configure FRONT_HOME e GOOGLE_CALLBACK nas envs do Render
+# Defaults (FRONT_HOME / GOOGLE_CALLBACK podem ser configurados via env)
 FRONT_DEFAULT = os.getenv("FRONT_HOME", "http://127.0.0.1:5173/")
-GOOGLE_CALLBACK = os.getenv(
-    "GOOGLE_CALLBACK", "http://127.0.0.1:5000/api/auth/google/callback"
-)
+GOOGLE_CALLBACK_ENV = os.getenv("GOOGLE_CALLBACK") or os.getenv("GOOGLE_REDIRECT_URI")
 
 
 def safe_fetchone(cur):
@@ -80,7 +78,6 @@ def _abs_front_url(target: str) -> str:
 def _commit_and_redirect(url: str):
     final_url = _abs_front_url(url)
     final_url = final_url.replace("localhost:5173", "127.0.0.1:5173")
-    # For JWT flow we will redirect with fragment token, but keep simple HTML fallback
     return (
         f"""<!doctype html><meta charset="utf-8">
 <script>
@@ -105,7 +102,7 @@ def is_postgres_db() -> bool:
         return False
 
 
-# ---------- REGISTRATION (returns JWT) ----------
+# ---------- REGISTER ----------
 @bp.post("/register")
 def register():
     data = request.get_json(silent=True) or {}
@@ -134,8 +131,8 @@ def register():
             if found:
                 return jsonify(ok=False, error="Email já cadastrado"), 400
 
-            new_id = None
             pw_hash = generate_password_hash(senha)
+            new_id = None
 
             if is_postgres_db():
                 cur = conn.cursor()
@@ -182,18 +179,16 @@ def register():
                     new_id = int(r.get("id"))
                 else:
                     current_app.logger.warning("Could not determine new user id after insert.")
-
     except Exception as exc:
         current_app.logger.exception("Erro no DB durante register: %s", exc)
         return jsonify(ok=False, error="Erro interno"), 500
 
-    # Success -> return JWT and user payload
     user = _get_user_by_id(new_id) if new_id else None
     token = create_access_token(identity=user["id"] if user else None)
     return jsonify(ok=True, user=user, access_token=token), 201
 
 
-# ---------- LOGIN (returns JWT) ----------
+# ---------- LOGIN ----------
 @bp.post("/login")
 def login():
     data = request.get_json(silent=True) or {}
@@ -229,7 +224,7 @@ def login():
     return jsonify(ok=True, user=user, access_token=token)
 
 
-# ---------- ME (protected by JWT) ----------
+# ---------- ME ----------
 @bp.get("/me")
 @jwt_required()
 def me():
@@ -244,43 +239,53 @@ def me():
         return jsonify({"authenticated": False}), 401
 
 
-# ---------- GOOGLE OAUTH: START FLOW (redirect to Google) ----------
+# ---------- GOOGLE OAUTH: START FLOW ----------
 @bp.get("/google")
 def google_login():
     """
-    Inicia o fluxo OAuth com o Google. Redireciona o usuário para a página de consent.
-    Aceita parâmetro opcional ?next=/alguma-rota para redirecionar depois do callback.
+    Inicia o fluxo OAuth com o Google.
+    Verifica pré-condições (provider registrado, envs presentes) antes do redirect.
     """
     try:
-        # next pode vir via query ?next=/perfil-adotante
+        # provider registrado?
+        if not getattr(oauth, "google", None):
+            current_app.logger.error("google_login: provider 'google' não registrado (init_oauth não rodou ou faltam envs).")
+            return jsonify(ok=False, error="OAuth provider not available"), 500
+
+        # envs mínimas
+        if not os.getenv("GOOGLE_CLIENT_ID") or not os.getenv("GOOGLE_CLIENT_SECRET"):
+            current_app.logger.error("google_login: GOOGLE_CLIENT_ID/SECRET ausentes.")
+            return jsonify(ok=False, error="OAuth not configured (missing client id/secret)"), 500
+
         next_path = request.args.get("next") or request.args.get("state") or "/"
-        # salva em session como fallback (caso provider limite state length)
         try:
             session["after_login_next"] = next_path
         except Exception:
-            # se session não estiver disponível (ex: secret_key não setada), apenas continue
-            current_app.logger.debug("Não foi possível salvar next em session; seguirá via state fallback.")
+            current_app.logger.debug("google_login: falha ao gravar session (verifique app.secret_key).")
 
-        # callback: prefira usar URL gerada dinamicamente, ou variável env se preferir.
-        # Usamos o callback do próprio backend para tratar o código e emitir token.
-        callback = url_for(".google_callback", _external=True)
+        # callback: usar env se definido, senão gerar dinamicamente
+        callback = GOOGLE_CALLBACK_ENV or url_for(".google_callback", _external=True)
+        current_app.logger.info("google_login: iniciando redirect; callback=%s next=%s", callback, next_path)
 
-        # Autorize redirect: passa `state` com next_path para recuperar depois (se quiser)
-        # OBS: alguns providers limitam o tamanho do state; se for grande, use session no backend.
         return oauth.google.authorize_redirect(redirect_uri=callback, state=next_path)
     except Exception as exc:
         current_app.logger.exception("Erro iniciando oauth google: %s", exc)
         return jsonify(ok=False, error="OAuth init failed"), 500
 
 
-# ---------- GOOGLE OAUTH CALLBACK -> return token in fragment ----------
+# ---------- GOOGLE OAUTH CALLBACK ----------
 @bp.get("/google/callback")
 def google_callback():
     try:
-        token_resp = oauth.google.authorize_access_token()
+        # usa fallback se disponível
+        if getattr(getattr(oauth, "google", None), "safe_authorize_access_token", None):
+            token_resp = oauth.google.safe_authorize_access_token()
+        else:
+            token_resp = oauth.google.authorize_access_token()
+
         userinfo = oauth.google.get("userinfo").json()
     except Exception as exc:
-        current_app.logger.exception("Google oauth error: %s", exc)
+        current_app.logger.exception("Google oauth error (callback): %s", exc)
         return jsonify(ok=False, error="OAuth failure"), 400
 
     email = userinfo.get("email")
@@ -291,10 +296,10 @@ def google_callback():
     if not sub:
         return jsonify(ok=False, error="Google não retornou sub"), 400
 
-    # existing logic: find by google_sub or by email, else create
+    # busca/cria usuário
+    user_id = None
     try:
         with db() as conn:
-            # check google_sub
             try:
                 with conn.cursor(dictionary=True) as cur:
                     cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
@@ -311,8 +316,6 @@ def google_callback():
             if u:
                 user_id = int(u["id"])
             else:
-                # try find by email
-                user_id = None
                 if email:
                     try:
                         cur2 = conn.cursor(dictionary=True)
@@ -325,9 +328,9 @@ def google_callback():
                             cur2.close()
                         except Exception:
                             pass
+
                     if r2 and r2.get("id"):
                         user_id = int(r2.get("id"))
-                        # bind google_sub
                         cur3 = conn.cursor()
                         cur3.execute(
                             "UPDATE usuarios SET google_sub=%s, avatar_url=%s WHERE id=%s",
@@ -338,7 +341,6 @@ def google_callback():
                         except Exception:
                             pass
 
-                # create new user if still None
                 if not user_id:
                     cur4 = conn.cursor()
                     if is_postgres_db():
@@ -358,7 +360,6 @@ def google_callback():
                         cur4.close()
                     except Exception:
                         pass
-
     except Exception as exc:
         current_app.logger.exception("Erro DB no google_callback: %s", exc)
         return jsonify(ok=False, error="Erro interno"), 500
@@ -366,12 +367,9 @@ def google_callback():
     user = _get_user_by_id(user_id) if user_id else None
     jwt_token = create_access_token(identity=user_id)
 
-    # FRONT_HOME pode estar em config do app; garantimos sem trailing slash
     FRONT = current_app.config.get("FRONT_HOME", FRONT_DEFAULT).rstrip("/")
-    # Recupera next: priorizamos state (query) -> session saved -> default "/"
     next_path = request.args.get("state") or session.pop("after_login_next", None) or "/"
 
-    # redirect with fragment so front can capture token client-side
     redirect_url = f"{FRONT}/#token={jwt_token}&next={next_path}"
     current_app.logger.info("Google-login redirect (truncated): %s", redirect_url[:200])
     return redirect(redirect_url)

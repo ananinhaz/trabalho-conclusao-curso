@@ -1,44 +1,57 @@
+# backend/app/extensions/oauth.py
 import os
 import requests
-from flask import request
+from flask import request, current_app
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.base_client.errors import MismatchingStateError
 
 oauth = OAuth()
 
 def init_oauth(app):
+    """
+    Inicializa o OAuth e registra o provider 'google' apenas se as envs necessárias existirem.
+    Anexa um fallback safe_authorize_access_token para lidar com MismatchingStateError em alguns setups.
+    """
     oauth.init_app(app)
 
-    # Registro  do cliente Google com OpenID
-    oauth.register(
-        name="google",
-        client_id=os.getenv("GOOGLE_CLIENT_ID"),
-        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    redirect_uri_env = os.getenv("GOOGLE_REDIRECT_URI") or os.getenv("GOOGLE_CALLBACK")
 
-    # fallback para ambiente localhost, state perdido
+    if not client_id or not client_secret:
+        app.logger.warning("init_oauth: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET ausentes — provider google NÃO será registrado.")
+        return
+
+    try:
+        oauth.register(
+            name="google",
+            client_id=client_id,
+            client_secret=client_secret,
+            # Using OpenID Connect discovery for endpoints
+            server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+            client_kwargs={"scope": "openid email profile"},
+        )
+        app.logger.info("init_oauth: provider 'google' registrado.")
+    except Exception as exc:
+        app.logger.exception("init_oauth: falha ao registrar provider google: %s", exc)
+        return
+
+    # Fallback para troca code -> token caso haja MismatchingStateError (cookies/session perdidos)
     def safe_authorize_access_token():
-        """
-        Executa o fluxo OAuth normal. Se der erro de MismatchingStateError
-        (por perda de cookie entre 8080 e 5000), refaz a troca de code->token.
-        """
         try:
-            # tenta fluxo normal
             return oauth.google.authorize_access_token()
         except MismatchingStateError:
-            print("⚠️ Aviso: ignorando mismatching_state (modo dev localhost)")
-
+            current_app.logger.warning("safe_authorize_access_token: MismatchingStateError - tentando fallback manual.")
             code = request.args.get("code")
             if not code:
                 raise
 
-            redirect_uri = os.getenv("GOOGLE_REDIRECT_URI") or request.base_url
+            # Prioriza redirect uri definido em env; caso contrário usa request.base_url (callback)
+            redirect_uri = redirect_uri_env or request.base_url
             token_endpoint = "https://oauth2.googleapis.com/token"
             data = {
-                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-                "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
@@ -46,12 +59,18 @@ def init_oauth(app):
 
             resp = requests.post(token_endpoint, data=data, timeout=10)
             if resp.status_code != 200:
-                print("❌ Falha ao trocar código por token:", resp.text)
+                current_app.logger.error(
+                    "safe_authorize_access_token: fallback token endpoint returned %s: %s",
+                    resp.status_code, resp.text
+                )
                 resp.raise_for_status()
 
             token = resp.json()
-            print("🔍 Google token response:", token)
+            current_app.logger.debug("safe_authorize_access_token: token keys: %s", list(token.keys()))
             return token
 
-    oauth.google.safe_authorize_access_token = safe_authorize_access_token
-    return oauth
+    # Anexa o fallback ao provider
+    try:
+        oauth.google.safe_authorize_access_token = safe_authorize_access_token
+    except Exception:
+        app.logger.exception("init_oauth: não foi possível anexar safe_authorize_access_token ao provider google.")
