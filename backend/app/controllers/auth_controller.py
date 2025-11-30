@@ -25,7 +25,7 @@ bp = Blueprint("auth", __name__, url_prefix="")  # registrado em /api/auth pelo 
 
 # Defaults (FRONT_HOME / GOOGLE_CALLBACK podem ser configurados via env)
 FRONT_DEFAULT = os.getenv("FRONT_HOME", "http://127.0.0.1:5173/")
-GOOGLE_CALLBACK_ENV = os.getenv("GOOGLE_CALLBACK") or os.getenv("GOOGLE_REDIRECT_URI")
+GOOGLE_CALLBACK_ENV = (os.getenv("GOOGLE_CALLBACK") or os.getenv("GOOGLE_REDIRECT_URI") or "").strip() or None
 
 
 def safe_fetchone(cur):
@@ -261,6 +261,7 @@ def google_login():
         try:
             session["after_login_next"] = next_path
         except Exception:
+            # normalmente por falta de secret_key; já resolvemos isso no create_app
             current_app.logger.debug("google_login: falha ao gravar session (verifique app.secret_key).")
 
         # callback: usar env se definido, senão gerar dinamicamente
@@ -276,6 +277,8 @@ def google_login():
 # ---------- GOOGLE OAUTH CALLBACK ----------
 @bp.get("/google/callback")
 def google_callback():
+    current_app.logger.info("google_callback: called; request.args keys=%s session keys=%s",
+                            list(request.args.keys()), list(session.keys()))
     try:
         # usa fallback se disponível
         if getattr(getattr(oauth, "google", None), "safe_authorize_access_token", None):
@@ -283,7 +286,19 @@ def google_callback():
         else:
             token_resp = oauth.google.authorize_access_token()
 
+        # token_resp pode ser dict (fallback) ou object retornado por authlib
+        try:
+            # se for dict (fallback manual), token_resp já é um dict com access_token
+            if isinstance(token_resp, dict):
+                current_app.logger.info("google_callback: token_resp keys=%s", list(token_resp.keys()))
+            else:
+                # para authlib token object, log keys sem conteúdo sensível
+                current_app.logger.info("google_callback: token obtained (authlib object).")
+        except Exception:
+            current_app.logger.debug("google_callback: não consegui inspecionar token_resp safely.")
+
         userinfo = oauth.google.get("userinfo").json()
+        current_app.logger.info("google_callback: got userinfo email=%s", userinfo.get("email"))
     except Exception as exc:
         current_app.logger.exception("Google oauth error (callback): %s", exc)
         return jsonify(ok=False, error="OAuth failure"), 400
@@ -368,6 +383,7 @@ def google_callback():
     jwt_token = create_access_token(identity=user_id)
 
     FRONT = current_app.config.get("FRONT_HOME", FRONT_DEFAULT).rstrip("/")
+    # priorizar state (query) -> session -> default
     next_path = request.args.get("state") or session.pop("after_login_next", None) or "/"
 
     redirect_url = f"{FRONT}/#token={jwt_token}&next={next_path}"
