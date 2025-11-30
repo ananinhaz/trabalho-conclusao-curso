@@ -15,7 +15,7 @@ export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Cores e Estilos Comuns
+  // Cores e Estilos Comuns a
   const primaryColor = "#6366F1"; 
   const primaryColorHover = "#4F46E5";
   const cardStyles = {
