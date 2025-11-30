@@ -99,8 +99,7 @@ export const authApi = {
   },
 
   loginWithGoogle(nextPath) {
-    // monta robustamente a URL para /api/auth/google
-    // API_BASE pode ser 'https://host' ou 'https://host/api' ou '/api' em dev
+ 
     const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
     let apiRoot = base;
     if (!base.endsWith('/api')) {
