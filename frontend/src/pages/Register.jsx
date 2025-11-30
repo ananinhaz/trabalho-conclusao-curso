@@ -1,147 +1,99 @@
+// src/pages/Register.jsx
 import { useState } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  Container,
-  Paper,
-  TextField,
-  Typography,
-} from "@mui/material";
 import { useNavigate, useLocation } from "react-router-dom";
-import { authApi } from "../api";
+import { authApi } from "../api.js";
 
 export default function Register() {
-  const [nome, setNome] = useState("");
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [msg, setMsg] = useState("");
-  const [ok, setOk] = useState(false);
-
   const navigate = useNavigate();
   const location = useLocation();
-  
-  const primaryColor = "#6366F1"; 
-  const primaryColorHover = "#4F46E5";
-  const cardStyles = {
-    borderRadius: "1.25rem",
-    boxShadow: "0 15px 45px rgba(15, 23, 42, 0.12)",
-  };
-
-  // pega o ?next=/perfil-adotante (ou /doar)
   const params = new URLSearchParams(location.search);
   const next = params.get("next") || "/animais";
 
-  async function onSubmit(e) {
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    setMsg("");
-    setOk(false);
-
+    setError("");
+    if (!nome || !email || !senha) {
+      setError("Preencha todos os campos.");
+      return;
+    }
+    setLoading(true);
     try {
-      // cria o usuário
-      await authApi.register(nome.trim(), email.trim(), senha);
-
-      // faz login automático
-      await authApi.login(email.trim(), senha);
-
-      setOk(true);
-
-      // vai para o fluxo que o usuário queria
-      navigate(next, { replace: true });
+      const resp = await authApi.register(nome, email, senha);
+      // authApi.register já salva access_token em localStorage (se retornado)
+      if (resp && resp.access_token) {
+        navigate(next, { replace: true });
+      } else {
+        setError(resp?.error || "Erro ao registrar. Tente novamente.");
+      }
     } catch (err) {
-      setMsg(err.message || "Falha no cadastro");
+      console.error("Register error:", err);
+      setError(err.message || "Erro ao comunicar com a API");
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #eff6ff 0%, #ffffff 40%, #eef2ff 100%)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        p: 3,
-      }}
-    >
-      <Container maxWidth="sm">
-        <Paper elevation={3} sx={{ ...cardStyles, p: 4 }}>
-          <Typography variant="h5" sx={{ fontWeight: 600, color: "#0f172a", mb: 2 }} gutterBottom>
-            Criar conta
-          </Typography>
-          <Box
-            component="form"
-            onSubmit={onSubmit}
-            sx={{ display: "grid", gap: 2, mt: 1 }}
-          >
-            <TextField
-              label="Nome"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              required
-              fullWidth
-            />
-            <TextField
-              label="E-mail"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              fullWidth
-            />
-            <TextField
-              label="Senha"
-              type="password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-              fullWidth
-            />
-            <Button
-              type="submit"
-              variant="contained"
-              fullWidth
-              sx={{
-                background: primaryColor,
-                py: 1.2,
-                borderRadius: "0.5rem",
-                textTransform: "none",
-                fontWeight: 600,
-                "&:hover": { background: primaryColorHover },
-                mt: 1,
-                boxShadow: 'none'
-              }}
-            >
-              Cadastrar
-            </Button>
-          </Box>
+    <div className="page-register">
+      <h2>Cadastrar</h2>
+      <form onSubmit={handleSubmit}>
+        <label>
+          Nome
+          <input
+            type="text"
+            value={nome}
+            onChange={(ev) => setNome(ev.target.value)}
+            required
+            autoComplete="name"
+          />
+        </label>
 
-          {msg && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {msg}
-            </Alert>
-          )}
-          {ok && (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              Conta criada! Redirecionando…
-            </Alert>
-          )}
+        <label>
+          E-mail
+          <input
+            type="email"
+            value={email}
+            onChange={(ev) => setEmail(ev.target.value)}
+            required
+            autoComplete="email"
+          />
+        </label>
 
-          <Typography sx={{ mt: 3, fontSize: "0.8rem", color: "#475569", textAlign: "center" }}>
-            Já tem conta?{" "}
-            <Button
-              onClick={() =>
-                navigate(`/login?next=${encodeURIComponent(next)}`)
-              }
-              size="small"
-              sx={{ color: primaryColor, textTransform: 'none', fontWeight: 600 }}
-            >
-              Entrar
-            </Button>
-          </Typography>
-        </Paper>
-      </Container>
-    </Box>
+        <label>
+          Senha
+          <input
+            type="password"
+            value={senha}
+            onChange={(ev) => setSenha(ev.target.value)}
+            required
+            autoComplete="new-password"
+          />
+        </label>
+
+        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
+
+        <button type="submit" disabled={loading}>
+          {loading ? "Cadastrando..." : "Cadastrar"}
+        </button>
+      </form>
+
+      <hr />
+
+      <div>
+        <button
+          onClick={() => {
+            authApi.loginWithGoogle(next);
+          }}
+        >
+          Cadastrar com Google
+        </button>
+      </div>
+    </div>
   );
 }

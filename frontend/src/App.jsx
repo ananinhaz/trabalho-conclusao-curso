@@ -1,3 +1,4 @@
+// src/App.jsx  (SUBSTITUA todo o arquivo)
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -10,6 +11,7 @@ import Animals from "./pages/Animals.jsx";
 import AnimalEdit from "./pages/AnimalEdit.jsx";
 import Profile from "./pages/Profile.jsx";
 import ProfileEdit from "./pages/ProfileEdit";
+import CaptureToken from "./components/CaptureToken";
 
 import { authApi } from "./api.js";
 
@@ -55,56 +57,59 @@ function PrivateRoute({ children }) {
 // Rotas principais
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route
-        path="/perfil-adotante"
-        element={
-          <PrivateRoute>
-            <AdopterForm />
-          </PrivateRoute>
-        }
-      />
+    <>
+      <CaptureToken />
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/perfil-adotante"
+          element={
+            <PrivateRoute>
+              <AdopterForm />
+            </PrivateRoute>
+          }
+        />
 
-      <Route
-        path="/doar"
-        element={
-          <PrivateRoute>
-            <Donate />
-          </PrivateRoute>
-        }
-      />
+        <Route
+          path="/doar"
+          element={
+            <PrivateRoute>
+              <Donate />
+            </PrivateRoute>
+          }
+        />
 
-      <Route
-        path="/animais"
-        element={
-          <PrivateRoute>
-            <Animals />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path="/animais/editar/:id"
-        element={
-          <PrivateRoute>
-            <AnimalEdit />
-          </PrivateRoute>
-        }
-      />
-      <Route
-  path="/perfil"
-  element={
-    <PrivateRoute>
-      <Profile />
-    </PrivateRoute>
-  }
-/>
-<Route path="/perfil/editar" element={<PrivateRoute><ProfileEdit /></PrivateRoute>} />
+        <Route
+          path="/animais"
+          element={
+            <PrivateRoute>
+              <Animals />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/animais/editar/:id"
+          element={
+            <PrivateRoute>
+              <AnimalEdit />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/perfil"
+          element={
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          }
+        />
+        <Route path="/perfil/editar" element={<PrivateRoute><ProfileEdit /></PrivateRoute>} />
 
-      {/* Fallback */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   );
 }

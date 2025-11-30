@@ -1,82 +1,110 @@
+# backend/app/__init__.py
 import os
-from flask import Flask, jsonify, request
+import urllib.parse
+from flask import Flask, current_app
 from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
 
-from .health import health_bp
+# keep your db/migrate vars if used elsewhere
+db = SQLAlchemy()
+migrate = Migrate()
+
+def _normalize_database_url(url: str) -> str:
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+    parsed = urllib.parse.urlsplit(url)
+    qs = parsed.query
+    if "sslmode=" not in qs:
+        qs = (qs + "&sslmode=require") if qs else "sslmode=require"
+        url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, qs, parsed.fragment))
+    return url
 
 def create_app():
     load_dotenv()
+    app = Flask(__name__, instance_relative_config=False)
 
-    app = Flask(__name__)
+    # FRONT_HOME from env (used by oauth redirect construction and by CORS)
+    FRONT_HOME = os.getenv("FRONT_HOME", "http://127.0.0.1:5173").rstrip("/")
 
-    # FRONT_HOME configurado (frontend) — usado no CORS e para decidir cookie secure
-    frontend_origin = os.getenv("FRONT_HOME", "http://localhost:5173").rstrip('/')
+    # Database
+    raw_db = os.getenv("DATABASE_URL")
+    if raw_db:
+        app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_database_url(raw_db)
+        app.logger.info("Using DATABASE_URL from env.")
+    else:
+        here = os.path.abspath(os.path.dirname(__file__))
+        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(here,'..','dev.db')}"
+        app.logger.warning("No DATABASE_URL found — using sqlite fallback.")
 
-    # Detecta se estamos em ambiente local (http) ou produção (https)
-    is_local_frontend = frontend_origin.startswith("http://localhost") or frontend_origin.startswith("http://127.0.0.1")
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-    # Em produção devemos usar Secure=True e SameSite=None para que cookies cross-site funcionem
-    session_cookie_secure = not is_local_frontend
-    session_cookie_samesite = "None" if session_cookie_secure else "Lax"
+    # JWT
+    app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "DEV_JWT_SECRET_CHANGE_ME")
+    jwt = JWTManager(app)
 
-    app.config.update(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-secret"),
-        SESSION_COOKIE_SAMESITE=session_cookie_samesite,
-        SESSION_COOKIE_SECURE=session_cookie_secure,
-        SESSION_PERMANENT=False,
-
-        SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL"),
-        SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"sslmode": "require"}, "pool_pre_ping": True}
-    )
-
-    # allowed origins: locais + frontend production (da env)
+    # CORS: JWT flow DOES NOT require cookies -> disable credentials
     allowed_origins = [
         "http://127.0.0.1:8080",
         "http://localhost:8080",
         "http://127.0.0.1:5173",
         "http://localhost:5173",
-        frontend_origin,
+        FRONT_HOME,
     ]
+    CORS(app,
+         supports_credentials=False,
+         resources={r"/*": {"origins": allowed_origins}},
+         allow_headers=["Content-Type", "Authorization"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         expose_headers=["Content-Type", "Authorization"],
+         )
 
-    # CORS: permita credenciais e somente o frontend
-    CORS(
-        app,
-        supports_credentials=True,
-        resources={r"/*": {"origins": allowed_origins}},
-        allow_headers=["Content-Type", "Authorization"],
-        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        expose_headers=["Content-Type"],
-    )
-
+    # preflight quick response
+    from flask import request
     @app.before_request
     def _preflight():
-        # responde rapidamente às preflight OPTIONS
         if request.method == "OPTIONS":
             return app.make_response(("", 200))
 
-    # extensões
-    from .extensions.oauth import init_oauth
-    init_oauth(app)
+    # init oauth/db extensions if present (graceful)
+    try:
+        from .extensions.oauth import init_oauth
+        init_oauth(app)
+        app.logger.info("OAuth extension initialized.")
+    except Exception as e:
+        app.logger.info("No oauth extension initialized or failed: %s", str(e))
 
-    from .extensions.db import init_db
-    init_db(app)
+    try:
+        from .extensions.db import init_db
+        init_db(app)
+        app.logger.info("DB extension initialized.")
+    except Exception as e:
+        app.logger.exception("DB init failed (will still start): %s", e)
 
-    # blueprints
-    from .controllers.auth_controller import bp as auth_bp
-    app.register_blueprint(auth_bp)
+    # Register blueprints (import after app created to avoid cycles)
+    try:
+        from .controllers.auth_controller import bp as auth_bp
+        app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    except Exception as e:
+        app.logger.exception("Failed to register auth_controller: %s", e)
+        raise
 
-    from .api import register_blueprints
-    register_blueprints(app)
+    try:
+        from .api import register_blueprints
+        register_blueprints(app)
+    except Exception:
+        app.logger.info("No api.register_blueprints available; skipping.")
 
-    # Registro do Blueprint de saúde
-    app.register_blueprint(health_bp)
-
-    @app.get("/")
-    def index():
-        return "API AdoptMe OK"
+    # health
+    @app.get("/health")
+    def health():
+        return "ok", 200
 
     return app
 
+# expose for gunicorn
 app = create_app()

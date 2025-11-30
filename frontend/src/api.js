@@ -1,3 +1,4 @@
+// src/api.js  (SUBSTITUA pelo conteúdo abaixo)
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 function joinUrl(base, path) {
@@ -11,13 +12,19 @@ async function apiFetch(path, { method = 'GET', body, headers } = {}) {
     ? API_BASE.slice(0, -1) + path
     : API_BASE + path;
 
+  // add Authorization header from localStorage (JWT)
+  const token = localStorage.getItem('access_token');
+
+  const finalHeaders = {
+    'Content-Type': 'application/json',
+    ...(headers || {}),
+  };
+  if (token) finalHeaders['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(fetchUrl, {
     method,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(headers || {}),
-    },
+    // JWT in header -> we DO NOT use credentials include
+    headers: finalHeaders,
     body: body ? JSON.stringify(body) : undefined,
   });
 
@@ -59,32 +66,52 @@ export function apiDel(path) {
 
 // auth
 export const authApi = {
-  me() {
+  async me() {
     return apiGet('/auth/me');
   },
-  login(email, senha) {
-    return apiPost('/auth/login', { email, senha });
+  // login: saves token if backend returns access_token
+  async login(email, senha) {
+    const data = await apiPost('/auth/login', { email, senha });
+    if (data && data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+    }
+    return data;
   },
-  register(nome, email, senha) {
-    return apiPost('/auth/register', { nome, email, senha });
+  async register(nome, email, senha) {
+    const data = await apiPost('/auth/register', { nome, email, senha });
+    if (data && data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+    }
+    return data;
   },
   logout() {
-    return apiPost('/auth/logout', {});
+    // clear local session token (backend logout optional)
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    // if your backend still wants a logout endpoint you can call it:
+    try {
+      apiPost('/auth/logout', {}); // fire-and-forget
+    } catch (e) {
+      // ignore
+    }
   },
 
   loginWithGoogle(nextPath) {
-    // rota correta no backend: /auth/login/google
-    const relativePath = '/auth/login/google';
+    // inicia o fluxo OAuth no backend; backend vai redirecionar para FRONT/#token=...
+    // API_BASE pode ser '/api' (dev proxy) ou absolute URL
+    const relativePath = '/auth/google';
     const isAbsolute = API_BASE.startsWith('http://') || API_BASE.startsWith('https://');
 
     let target;
     if (isAbsolute) {
-      // API_BASE pode já conter '/api' ou o host completo
       const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
       target = baseNoSlash + relativePath;
     } else {
-      // em dev usando proxy /api -> backend; monta com /api prefix
-      target = '/api' + relativePath;
+      // quando API_BASE é '/api' no dev, queremos '/api/auth/google'
+      const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+      target = baseNoSlash + relativePath;
     }
 
     if (nextPath) target += `?next=${encodeURIComponent(nextPath)}`;
