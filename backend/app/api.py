@@ -61,14 +61,16 @@ def _decode_jwt_payload_no_verify(token: str) -> dict:
         return {}
 
 def _validate_and_get_payload(token: str) -> dict:
-    """Se JWT_SECRET disponível e pyjwt instalado, valida e retorna payload; senão tenta no-verify."""
+    """
+    Se JWT_SECRET disponível e pyjwt instalado, valida e retorna payload;
+    senão tenta decodificar sem verificar assinatura (transição).
+    """
     if JWT_SECRET and pyjwt:
         try:
             payload = pyjwt.decode(token, JWT_SECRET, algorithms=JWT_ALGS)
             return payload or {}
         except Exception:
             return {}
-    # fallback
     return _decode_jwt_payload_no_verify(token)
 
 def _require_auth() -> Optional[int]:
@@ -77,6 +79,7 @@ def _require_auth() -> Optional[int]:
      1) session['user_id']
      2) Authorization: Bearer <token> (valida se possível, senão decodifica)
      3) se token for só dígitos aceita como id (legacy)
+    Retorna int(uid) ou None.
     """
     uid = session.get("user_id")
     if uid:
@@ -112,8 +115,12 @@ def _require_auth() -> Optional[int]:
                     pass
     return None
 
-# --- normalizações ---------------------------------------------------------
+# --- normalizações mínimas conforme TCC ----------------------------------
 def to_bool_like(v):
+    """
+    Normalização básica conforme uso no TCC:
+    aceita True/False, 't','s','sim','1','true'
+    """
     if isinstance(v, bool):
         return v
     if v is None:
@@ -168,33 +175,22 @@ def _rows_to_payload(rows, ids):
 
 # --- IA: vetorização conforme TCC -----------------------------------------
 def _build_user_vector(perfil: dict) -> list[float]:
-    """
-    Vetorização do perfil do adotante conforme especificação do TCC:
-     - tipo_moradia -> tm_vec (0.0 apartamento / 1.0 casa)
-     - tem_criancas -> 0/1
-     - tempo_disponivel_horas_semana -> normalizado 0-20 -> /20 (peso grande)
-     - estilo_vida -> 0.0 calmo / 1.0 ativo / 0.5 neutro
-    """
     tipo_moradia = (perfil.get("tipo_moradia") or "").strip().lower()
     tem_criancas = to_bool_like(perfil.get("tem_criancas"))
-    # tempo pode vir "010" ou "8"
     try:
         tempo = int(str(perfil.get("tempo_disponivel_horas_semana") or "0").strip())
     except Exception:
         tempo = 0
     estilo_raw = (perfil.get("estilo_vida") or "").strip().lower()
 
-    # tipo moradia
     tm_vec = 0.5
     if "aparta" in tipo_moradia or "apartamento" in tipo_moradia:
         tm_vec = 0.0
     elif "casa" in tipo_moradia or "quintal" in tipo_moradia:
         tm_vec = 1.0
 
-    # tempo normalizado
     tempo_norm = min(max(tempo, 0), 20) / 20.0
 
-    # estilo de vida
     estilo_vec = 0.5
     if any(k in estilo_raw for k in ("ativo", "esport", "corrida", "muito", "muito tempo")):
         estilo_vec = 1.0
@@ -206,18 +202,10 @@ def _build_user_vector(perfil: dict) -> list[float]:
     return [tm_vec, float(tem_criancas), tempo_norm, estilo_vec]
 
 def _build_animal_vector(a: dict) -> list[float]:
-    """
-    Vetorização do animal conforme TCC:
-     - v0 (tipo/porte/especie): gato/pequeno -> 0.0, médio -> 0.5, grande -> 1.0
-     - v1 bom_com_criancas -> 1.0/0.0
-     - v2 tempo (filhote/cachorro -> 1.0, gato -> 0.0, else 0.5)
-     - v3 estilo (cachorro/filhote -> 1.0, else 0.0)
-    """
     especie = str(a.get("especie") or "").strip().lower()
     porte = str(a.get("porte") or "").strip().lower()
     idade_raw = str(a.get("idade") or "0").strip()
 
-    # idade -> categoriza filhote/adulto/idoso quando possível
     try:
         n = float(idade_raw.split()[0].replace(",", "."))
         if n <= 1:
@@ -229,19 +217,16 @@ def _build_animal_vector(a: dict) -> list[float]:
     except Exception:
         idade_cat = idade_raw.lower() or "adulto"
 
-    # v0
     if "gato" in especie or "pequeno" in porte or "pequena" in porte or "mini" in porte:
         v0 = 0.0
-    elif "medio" in porte or "médio" in porte or "médio" in porte:
+    elif "medio" in porte or "médio" in porte:
         v0 = 0.5
     else:
         v0 = 1.0
 
-    # v1
     bom_com_criancas = to_bool_like(a.get("bom_com_criancas"))
     v1 = 1.0 if bom_com_criancas else 0.0
 
-    # v2
     if "gato" in especie:
         v2 = 0.0
     elif idade_cat == "filhote" or "cachorr" in especie:
@@ -249,7 +234,6 @@ def _build_animal_vector(a: dict) -> list[float]:
     else:
         v2 = 0.5
 
-    # v3
     if "cachorr" in especie or idade_cat == "filhote":
         v3 = 1.0
     else:
@@ -695,13 +679,21 @@ def recomendacoes():
     if X_animals.size == 0:
         return jsonify(_rows_to_payload([], []))
 
-    distances = pairwise_distances(
-        user_vec_np,
-        X_animals,
-        metric='minkowski',
-        p=2,
-        w=VEC_WEIGHTS
-    )[0]
+    # usa wminkowski para aplicar pesos como no TCC; se não disponível, fallback manual
+    try:
+        distances = pairwise_distances(
+            user_vec_np,
+            X_animals,
+            metric='wminkowski',
+            p=2,
+            w=VEC_WEIGHTS
+        )[0]
+    except Exception:
+        # fallback manual: calcular distância ponderada (comportamento equivalente)
+        # wminkowski multiplies differences by weights internally; aqui multiplicamos para reproduzir
+        diff = X_animals - user_vec_np  # shape (m,4)
+        weighted = diff * VEC_WEIGHTS  # manter mesma semântica de peso
+        distances = np.sqrt((weighted ** 2).sum(axis=1))
 
     scored = [(float(dist), animal_data) for dist, animal_data in zip(distances, animal_map)]
     scored.sort(key=lambda x: x[0])
