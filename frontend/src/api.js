@@ -1,4 +1,4 @@
-// src/api.js  (SUBSTITUA pelo conteúdo abaixo)
+// src/api.js
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 function joinUrl(base, path) {
@@ -99,22 +99,15 @@ export const authApi = {
   },
 
   loginWithGoogle(nextPath) {
-    // inicia o fluxo OAuth no backend; backend vai redirecionar para FRONT/#token=...
-    // API_BASE pode ser '/api' (dev proxy) ou absolute URL
-    const relativePath = '/auth/google';
-    const isAbsolute = API_BASE.startsWith('http://') || API_BASE.startsWith('https://');
-
-    let target;
-    if (isAbsolute) {
-      const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-      target = baseNoSlash + relativePath;
-    } else {
-      // quando API_BASE é '/api' no dev, queremos '/api/auth/google'
-      const baseNoSlash = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
-      target = baseNoSlash + relativePath;
+    // monta robustamente a URL para /api/auth/google
+    // API_BASE pode ser 'https://host' ou 'https://host/api' ou '/api' em dev
+    const base = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE;
+    let apiRoot = base;
+    if (!base.endsWith('/api')) {
+      // se base for '/api' ou '/api/' isso não acrescenta duplicado
+      apiRoot = base + '/api';
     }
-
-    if (nextPath) target += `?next=${encodeURIComponent(nextPath)}`;
+    const target = apiRoot + '/auth/google' + (nextPath ? `?next=${encodeURIComponent(nextPath)}` : '');
     window.location.href = target;
   },
 };
