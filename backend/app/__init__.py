@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 db = SQLAlchemy()
 migrate = Migrate()
 
+
 def _normalize_database_url(url: str) -> str:
     if not url:
         return url
@@ -24,12 +25,24 @@ def _normalize_database_url(url: str) -> str:
         url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, qs, parsed.fragment))
     return url
 
+
 def create_app():
     load_dotenv()
     app = Flask(__name__, instance_relative_config=False)
 
+    #
+    # IMPORTANT: set secret_key early so that `session` is available
+    # (Authlib / Flask-OAuth requires session to store state).
+    #
+    # Provide FLASK_SECRET_KEY in Render (or SECRET_KEY). Fallback is a dev string.
+    #
+    app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev_secret_change_me"
+    # Log presence only (do not log the secret value)
+    app.logger.info("create_app: secret_key set? %s", bool(app.secret_key))
+
     # FRONT_HOME from env (used by oauth redirect construction and by CORS)
     FRONT_HOME = os.getenv("FRONT_HOME", "http://127.0.0.1:5173").rstrip("/")
+    app.config["FRONT_HOME"] = FRONT_HOME
 
     # Database
     raw_db = os.getenv("DATABASE_URL")
@@ -71,6 +84,7 @@ def create_app():
             return app.make_response(("", 200))
 
     # init oauth/db extensions if present (graceful)
+    # NOTE: init_oauth must run after app.secret_key is set (so session works)
     try:
         from .extensions.oauth import init_oauth
         init_oauth(app)
@@ -109,7 +123,15 @@ def create_app():
     def health():
         return "ok", 200
 
+    # quick debug info in logs
+    app.logger.info(
+        "create_app: startup complete; FRONT_HOME=%s; GOOGLE_CLIENT_ID present=%s",
+        FRONT_HOME,
+        bool(os.getenv("GOOGLE_CLIENT_ID"))
+    )
+
     return app
+
 
 # expose for gunicorn
 app = create_app()
