@@ -3,7 +3,16 @@ from __future__ import annotations
 import os
 import traceback
 from urllib.parse import urljoin
-from flask import Blueprint, url_for, request, jsonify, current_app, redirect
+
+from flask import (
+    Blueprint,
+    url_for,
+    request,
+    jsonify,
+    current_app,
+    redirect,
+    session,
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
@@ -12,10 +21,13 @@ db = getattr(db_module, "db", None)
 
 from ..extensions.oauth import oauth
 
-bp = Blueprint("auth", __name__, url_prefix="")  # we'll mount to /api/auth in create_app()
+bp = Blueprint("auth", __name__, url_prefix="")  # será montado em /api/auth pelo create_app()
 
+# Defaults; em produção configure FRONT_HOME e GOOGLE_CALLBACK nas envs do Render
 FRONT_DEFAULT = os.getenv("FRONT_HOME", "http://127.0.0.1:5173/")
-GOOGLE_CALLBACK = os.getenv("GOOGLE_CALLBACK", "http://127.0.0.1:5000/api/auth/google/callback")
+GOOGLE_CALLBACK = os.getenv(
+    "GOOGLE_CALLBACK", "http://127.0.0.1:5000/api/auth/google/callback"
+)
 
 
 def safe_fetchone(cur):
@@ -232,6 +244,35 @@ def me():
         return jsonify({"authenticated": False}), 401
 
 
+# ---------- GOOGLE OAUTH: START FLOW (redirect to Google) ----------
+@bp.get("/google")
+def google_login():
+    """
+    Inicia o fluxo OAuth com o Google. Redireciona o usuário para a página de consent.
+    Aceita parâmetro opcional ?next=/alguma-rota para redirecionar depois do callback.
+    """
+    try:
+        # next pode vir via query ?next=/perfil-adotante
+        next_path = request.args.get("next") or request.args.get("state") or "/"
+        # salva em session como fallback (caso provider limite state length)
+        try:
+            session["after_login_next"] = next_path
+        except Exception:
+            # se session não estiver disponível (ex: secret_key não setada), apenas continue
+            current_app.logger.debug("Não foi possível salvar next em session; seguirá via state fallback.")
+
+        # callback: prefira usar URL gerada dinamicamente, ou variável env se preferir.
+        # Usamos o callback do próprio backend para tratar o código e emitir token.
+        callback = url_for(".google_callback", _external=True)
+
+        # Autorize redirect: passa `state` com next_path para recuperar depois (se quiser)
+        # OBS: alguns providers limitam o tamanho do state; se for grande, use session no backend.
+        return oauth.google.authorize_redirect(redirect_uri=callback, state=next_path)
+    except Exception as exc:
+        current_app.logger.exception("Erro iniciando oauth google: %s", exc)
+        return jsonify(ok=False, error="OAuth init failed"), 500
+
+
 # ---------- GOOGLE OAUTH CALLBACK -> return token in fragment ----------
 @bp.get("/google/callback")
 def google_callback():
@@ -324,9 +365,13 @@ def google_callback():
 
     user = _get_user_by_id(user_id) if user_id else None
     jwt_token = create_access_token(identity=user_id)
+
+    # FRONT_HOME pode estar em config do app; garantimos sem trailing slash
     FRONT = current_app.config.get("FRONT_HOME", FRONT_DEFAULT).rstrip("/")
+    # Recupera next: priorizamos state (query) -> session saved -> default "/"
     next_path = request.args.get("state") or session.pop("after_login_next", None) or "/"
-    # redirect with fragment so front can capture
+
+    # redirect with fragment so front can capture token client-side
     redirect_url = f"{FRONT}/#token={jwt_token}&next={next_path}"
     current_app.logger.info("Google-login redirect (truncated): %s", redirect_url[:200])
     return redirect(redirect_url)
