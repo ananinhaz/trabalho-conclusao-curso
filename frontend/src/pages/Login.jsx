@@ -1,85 +1,224 @@
 // src/pages/Login.jsx
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { authApi } from "../api.js";
+
+/**
+ * Login page
+ *
+ * - POST /api/auth/login { email, senha }
+ * - expects JSON { ok: true, access_token, user } on success
+ * - stores token in localStorage under 'access_token'
+ */
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // try to read ?next=... from querystring
   const params = new URLSearchParams(location.search);
-  const next = params.get("next") || "/animais";
+  const initialNext = params.get("next") || "/perfil-adotante";
 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [next, setNext] = useState(initialNext);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    setNext(initialNext);
+  }, [initialNext]);
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError("");
+    setMsg(null);
+
+    if (!email || !senha) {
+      setMsg({ type: "error", text: "Preencha email e senha." });
+      return;
+    }
+
     setLoading(true);
     try {
-      const resp = await authApi.login(email, senha);
-      // authApi.login já grava access_token em localStorage
-      if (resp && resp.access_token) {
-        navigate(next, { replace: true });
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
+      });
+
+      const js = await res.json().catch(() => null);
+
+      if (!res.ok || !js) {
+        const errText = js && js.error ? js.error : `Erro ${res.status}`;
+        setMsg({ type: "error", text: `Falha ao logar: ${errText}` });
+        setLoading(false);
+        return;
+      }
+
+      if (js.ok && js.access_token) {
+        // Save token and redirect
+        localStorage.setItem("access_token", js.access_token);
+        setMsg({ type: "success", text: "Login realizado. Redirecionando..." });
+        setTimeout(() => {
+          // redirect to next
+          window.location.href = next || "/perfil-adotante";
+        }, 400);
       } else {
-        // se backend respondeu sem token, mostra mensagem
-        setError(resp?.error || "Erro no login. Tente novamente.");
+        setMsg({ type: "error", text: js.error || "Resposta inesperada do servidor." });
       }
     } catch (err) {
-      console.error("Login error:", err);
-      setError(err.message || "Erro ao comunicar com a API");
+      console.error("login error", err);
+      setMsg({ type: "error", text: "Erro de rede ao tentar logar." });
     } finally {
       setLoading(false);
     }
   }
 
+  function goToRegister() {
+    const target = `/register?next=${encodeURIComponent(next || "/perfil-adotante")}`;
+    // use router navigate or plain location (keeping behavior consistent)
+    navigate(target);
+  }
+
+  function loginWithGoogle() {
+    // open backend oauth entry (backend will redirect to Google)
+    const url = `/api/auth/google?next=${encodeURIComponent(next || "/perfil-adotante")}`;
+    window.location.href = url;
+  }
+
   return (
-    <div className="page-login">
-      <h2>Entrar</h2>
-      <form onSubmit={handleSubmit}>
-        <label>
+    <div style={styles.container}>
+      <h1 style={styles.title}>Entrar</h1>
+
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <label style={styles.label}>
           E-mail
           <input
             type="email"
             value={email}
-            onChange={(ev) => setEmail(ev.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
+            style={styles.input}
+            placeholder="seu@exemplo.com"
             required
-            autoComplete="username"
           />
         </label>
 
-        <label>
+        <label style={styles.label}>
           Senha
           <input
             type="password"
             value={senha}
-            onChange={(ev) => setSenha(ev.target.value)}
+            onChange={(e) => setSenha(e.target.value)}
+            style={styles.input}
+            placeholder="••••••••"
             required
-            autoComplete="current-password"
           />
         </label>
 
-        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
-
-        <button type="submit" disabled={loading}>
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
+        <div style={{ marginTop: 10 }}>
+          <button type="submit" disabled={loading} style={styles.primaryButton}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+        </div>
       </form>
 
-      <hr />
+      <hr style={styles.hr} />
 
-      <div>
-        <button
-          onClick={() => {
-            // inicia fluxo google (backend redireciona para FRONT/#token=...)
-            authApi.loginWithGoogle(next);
-          }}
-        >
+      <div style={styles.actions}>
+        <button onClick={loginWithGoogle} style={styles.ghostButton}>
           Entrar com Google
         </button>
+
+        <div style={{ marginTop: 12 }}>
+          <span>Não tem conta? </span>
+          <button onClick={goToRegister} style={styles.linkButton}>
+            Criar conta
+          </button>
+        </div>
       </div>
+
+      {msg && (
+        <div
+          role="alert"
+          style={{
+            marginTop: 16,
+            padding: "10px 12px",
+            borderRadius: 6,
+            color: msg.type === "error" ? "#7a1b1b" : "#084d07",
+            background: msg.type === "error" ? "#fee" : "#eefbe9",
+            border: `1px solid ${msg.type === "error" ? "#f5c2c2" : "#cde8c9"}`,
+          }}
+        >
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 }
+
+const styles = {
+  container: {
+    maxWidth: 760,
+    margin: "24px auto",
+    padding: 18,
+    fontFamily: "Inter, Roboto, Arial, sans-serif",
+  },
+  title: {
+    margin: "0 0 12px 0",
+  },
+  form: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  label: {
+    display: "flex",
+    flexDirection: "column",
+    fontSize: 14,
+  },
+  input: {
+    marginTop: 6,
+    padding: "8px 10px",
+    fontSize: 14,
+    borderRadius: 6,
+    border: "1px solid #ccc",
+    width: "100%",
+    boxSizing: "border-box",
+  },
+  primaryButton: {
+    padding: "8px 14px",
+    borderRadius: 6,
+    border: "none",
+    background: "#6b5cff",
+    color: "#fff",
+    cursor: "pointer",
+    fontSize: 14,
+  },
+  ghostButton: {
+    padding: "8px 14px",
+    borderRadius: 6,
+    border: "1px solid #6b5cff",
+    background: "#fff",
+    color: "#6b5cff",
+    cursor: "pointer",
+    fontSize: 14,
+  },
+  linkButton: {
+    marginLeft: 6,
+    background: "none",
+    border: "none",
+    color: "#6b5cff",
+    textDecoration: "underline",
+    cursor: "pointer",
+    fontSize: 14,
+  },
+  hr: {
+    margin: "20px 0",
+    border: "none",
+    borderTop: "1px solid #eee",
+  },
+  actions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  },
+};
