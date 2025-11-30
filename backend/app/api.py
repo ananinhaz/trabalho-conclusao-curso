@@ -817,4 +817,5 @@ def adoption_metrics():
 
 # REGISTRO DE BLUEPRINTS
 def register_blueprints(app):
-    app.register_blueprint(bp_api)
+    # monta todas as rotas deste módulo sob /api/*
+    app.register_blueprint(bp_api, url_prefix="/api")
