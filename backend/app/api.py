@@ -3,6 +3,9 @@ from flask import Blueprint, request, jsonify, session
 import numpy as np
 from sklearn.metrics.pairwise import pairwise_distances
 from datetime import datetime, timedelta
+import base64
+import json
+from typing import Optional
 
 from .extensions import db as db_ext
 
@@ -30,9 +33,70 @@ def is_postgres() -> bool:
         return False
 
 
-def _require_auth() -> int | None:
+def _decode_jwt_payload_no_verify(token: str) -> dict:
+    """
+    Decodifica o payload de um JWT sem verificar assinatura.
+    Retorna dict vazio se não for possível.
+    """
+    try:
+        parts = token.split('.')
+        if len(parts) != 3:
+            return {}
+        payload_b64 = parts[1]
+        # Ajuste de padding
+        rem = len(payload_b64) % 4
+        if rem > 0:
+            payload_b64 += '=' * (4 - rem)
+        payload_bytes = base64.urlsafe_b64decode(payload_b64.encode('utf-8'))
+        payload_json = payload_bytes.decode('utf-8')
+        return json.loads(payload_json)
+    except Exception:
+        return {}
+
+
+def _require_auth() -> Optional[int]:
+    """
+    Tenta obter o user id:
+     1) da session (session['user_id'])
+     2) do header Authorization: Bearer <token> (decodificando payload do JWT)
+     3) se o token for só um número, usa ele direto
+    Retorna int(uid) ou None.
+    """
+    # 1) session (padrão)
     uid = session.get("user_id")
-    return int(uid) if uid else None
+    if uid:
+        try:
+            return int(uid)
+        except Exception:
+            pass
+
+    # 2) Authorization header
+    auth = request.headers.get("Authorization") or request.headers.get("authorization")
+    if auth:
+        parts = auth.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token = parts[1].strip()
+            # se o token for apenas dígitos, retorne direto
+            if token.isdigit():
+                try:
+                    return int(token)
+                except Exception:
+                    pass
+            # tenta decodificar jwt e extrair claims comuns
+            payload = _decode_jwt_payload_no_verify(token)
+            if payload:
+                # procura chaves comuns que podem armazenar user id
+                for k in ("user_id", "userid", "uid", "sub", "id", "usuario_id"):
+                    if k in payload and payload[k] is not None:
+                        try:
+                            return int(payload[k])
+                        except Exception:
+                            # se não for int, tente extrair números
+                            try:
+                                return int(str(payload[k]))
+                            except Exception:
+                                pass
+    return None
 
 
 def to_bool_like(v):
@@ -142,8 +206,6 @@ def _build_animal_vector(a: dict) -> list[float]:
         idade = idade_raw.lower()
 
     #  TIPO DE MORADIA
-    # Se usuário mora em ap (0.0), prefere Gato ou Pequeno (0.0)
-    # Se usuário mora em Casa (1.0), prefere Médio/Grande (0.5 a 1.0)
     if especie == "gato" or porte == "pequeno":
         v0 = 0.0
     elif porte == "medio" or "médio" in porte:
@@ -152,14 +214,10 @@ def _build_animal_vector(a: dict) -> list[float]:
         v0 = 1.0
 
     # CRIANÇAS 
-    # Se o animal é bom com crianças -> 1.0
-    # Se não é (ou não sabemos) -> 0.0
     bom_com_criancas = to_bool_like(a.get("bom_com_criancas"))
     v1 = 1.0 if bom_com_criancas else 0.0
 
     # TEMPO DISPONÍVEL 
-    # usuario com pouco tempo (0.0) -> Gato (0.0)
-    # usuario com muito tempo (1.0) -> Filhote ou Cachorro (1.0)
     if especie == "gato":
         v2 = 0.0
     elif idade == "filhote" or especie == "cachorro":
@@ -168,8 +226,6 @@ def _build_animal_vector(a: dict) -> list[float]:
         v2 = 0.5
 
     #  ESTILO DE VIDA 
-    # usuario calmo (0.0) -> evita agitação
-    # usuario ativo (1.0) -> quer cachorro ou filhote (1.0)
     if especie == "cachorro" or idade == "filhote":
         v3 = 1.0
     else:
@@ -380,7 +436,6 @@ def create_animal():
                     animal_id = None
 
     return jsonify({"ok": True, "id": animal_id})
-
 
 # GET /animais/<id>
 
