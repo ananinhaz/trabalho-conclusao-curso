@@ -99,6 +99,11 @@ def create_app():
     except Exception:
         app.logger.info("No api.register_blueprints available; skipping.")
 
+    # root status (responde na raiz para indicar que o backend está OK)
+    @app.route("/", methods=["GET"])
+    def root_status():
+        return "AdoptMe OK", 200
+
     # health
     @app.get("/health")
     def health():
