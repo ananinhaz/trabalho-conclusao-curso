@@ -102,6 +102,23 @@ def is_postgres_db() -> bool:
         return False
 
 
+def _make_token_for_user_id(user_id):
+    """
+    Garantir que o 'identity' passado para create_access_token seja string (sub precisa ser string).
+    Retorna o token criado.
+    """
+    if user_id is None:
+        # não deveria acontecer, mas tratar
+        current_app.logger.warning("_make_token_for_user_id called with None")
+        identity = None
+    else:
+        # forçar string
+        identity = str(user_id)
+    token = create_access_token(identity=identity)
+    current_app.logger.debug("_make_token_for_user_id: created token for identity=%s", identity)
+    return token
+
+
 # ---------- REGISTER ----------
 @bp.post("/register")
 def register():
@@ -184,7 +201,8 @@ def register():
         return jsonify(ok=False, error="Erro interno"), 500
 
     user = _get_user_by_id(new_id) if new_id else None
-    token = create_access_token(identity=user["id"] if user else None)
+    # criar token garantindo identity como string
+    token = _make_token_for_user_id(user["id"] if user else None)
     return jsonify(ok=True, user=user, access_token=token), 201
 
 
@@ -220,7 +238,7 @@ def login():
         return jsonify(ok=False, error="Credenciais inválidas"), 401
 
     user = _get_user_by_id(int(row["id"]))
-    token = create_access_token(identity=int(row["id"]))
+    token = _make_token_for_user_id(int(row["id"]))
     return jsonify(ok=True, user=user, access_token=token)
 
 
@@ -230,7 +248,14 @@ def login():
 def me():
     try:
         uid = get_jwt_identity()
-        user = _get_user_by_id(int(uid))
+        # get_jwt_identity() retorna a string que foi colocada em sub — converter ao usar no DB
+        try:
+            uid_int = int(uid) if uid is not None else None
+        except Exception:
+            current_app.logger.warning("me: jwt identity is not integer-convertible: %r", uid)
+            return jsonify({"authenticated": False}), 401
+
+        user = _get_user_by_id(uid_int)
         if not user:
             return jsonify({"authenticated": False}), 401
         return jsonify({"authenticated": True, "user": user})
@@ -286,7 +311,7 @@ def google_callback():
         else:
             token_resp = oauth.google.authorize_access_token()
 
-        # token_resp pode ser dict (fallback) ou object retornado por authlib
+        # token_resp pode ser dict (fallback manual) ou object retornado por authlib
         try:
             # se for dict (fallback manual), token_resp já é um dict com access_token
             if isinstance(token_resp, dict):
@@ -380,7 +405,8 @@ def google_callback():
         return jsonify(ok=False, error="Erro interno"), 500
 
     user = _get_user_by_id(user_id) if user_id else None
-    jwt_token = create_access_token(identity=user_id)
+    # garantir que token identity seja string
+    jwt_token = _make_token_for_user_id(user_id)
 
     FRONT = current_app.config.get("FRONT_HOME", FRONT_DEFAULT).rstrip("/")
     # priorizar state (query) -> session -> default
