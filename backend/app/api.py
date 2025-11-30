@@ -8,7 +8,6 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 import numpy as np
-from sklearn.metrics.pairwise import pairwise_distances
 
 from .extensions import db as db_ext
 
@@ -679,26 +678,72 @@ def recomendacoes():
     if X_animals.size == 0:
         return jsonify(_rows_to_payload([], []))
 
-    # usa wminkowski para aplicar pesos como no TCC; se não disponível, fallback manual
+    # --- FORÇAR USO DO SKLEARN NearestNeighbors(wminkowski) -------------------
+    # Retorna erro claro se sklearn não estiver instalado/compatível (assim você
+    # mostra no TCC que efetivamente usou a biblioteca e não um fallback manual).
     try:
-        distances = pairwise_distances(
-            user_vec_np,
-            X_animals,
+        from sklearn.neighbors import NearestNeighbors
+        import sklearn
+        sklearn_version = getattr(sklearn, "__version__", "unknown")
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": "sklearn_required",
+            "message": "scikit-learn não está instalado ou tem versão incompatível. Instale scikit-learn>=1.0 e redeploy.",
+            "detail": str(e)
+        }), 500
+
+    k = min(len(X_animals), n)
+    try:
+        nbrs = NearestNeighbors(
+            n_neighbors=k,
             metric='wminkowski',
             p=2,
-            w=VEC_WEIGHTS
-        )[0]
-    except Exception:
-        # fallback manual: calcular distância ponderada (comportamento equivalente)
-        # wminkowski multiplies differences by weights internally; aqui multiplicamos para reproduzir
-        diff = X_animals - user_vec_np  # shape (m,4)
-        weighted = diff * VEC_WEIGHTS  # manter mesma semântica de peso
-        distances = np.sqrt((weighted ** 2).sum(axis=1))
+            metric_params={'w': VEC_WEIGHTS}
+        )
+        nbrs.fit(X_animals)
+        distances_all, indices = nbrs.kneighbors(user_vec_np, n_neighbors=k)
+        # build full distances array (inf para não solicitados)
+        distances = np.full(X_animals.shape[0], float("inf"), dtype=float)
+        for pos, idx in enumerate(indices[0]):
+            distances[idx] = float(distances_all[0][pos])
+        method_used = f"NearestNeighbors(wminkowski) sklearn {sklearn_version}"
+    except Exception as exc:
+        return jsonify({
+            "ok": False,
+            "error": "sklearn_wminkowski_error",
+            "message": "Erro ao usar NearestNeighbors(wminkowski). Verifique versão do scikit-learn e redeploy.",
+            "detail": str(exc)
+        }), 500
 
     scored = [(float(dist), animal_data) for dist, animal_data in zip(distances, animal_map)]
     scored.sort(key=lambda x: x[0])
     top = [a for _, a in scored[:n]]
     ids = [a["id"] for a in top]
+
+    # se debug=1 devolve metadata para confirmação
+    if str(request.args.get("debug") or "").strip() == "1":
+        debug_user_vec = user_vec
+        debug_sample = []
+        for i, a_map in enumerate(animal_map[:6]):
+            debug_sample.append({
+                "id": a_map.get("id"),
+                "nome": a_map.get("nome"),
+                "animal_vector": _build_animal_vector(a_map),
+            })
+        return jsonify({
+            "ok": True,
+            "items": [_row_to_animal(r) for r in top],
+            "ids": ids,
+            "debug": {
+                "method_used": method_used,
+                "sklearn_version": sklearn_version,
+                "VEC_WEIGHTS": VEC_WEIGHTS.tolist(),
+                "user_vector": debug_user_vec,
+                "animal_sample": debug_sample,
+            }
+        })
+
     return jsonify(_rows_to_payload(top, ids))
 
 # --- marcar/desmarcar adotado_em ------------------------------------------
@@ -745,7 +790,7 @@ def adopt_animal(aid: int):
         current_app.logger.error("ERROR adopt_animal: %s\n%s", str(e), tb)
         return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
     finally:
-        try: 
+        try:
             if cur: cur.close()
         except Exception: pass
         try:
