@@ -69,12 +69,12 @@ def create_app():
         FRONT_HOME,
     ]
     CORS(app,
-         supports_credentials=False,
-         resources={r"/*": {"origins": allowed_origins}},
-         allow_headers=["Content-Type", "Authorization"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         expose_headers=["Content-Type", "Authorization"],
-         )
+     supports_credentials=False,
+     resources={r"/api/*": {"origins": allowed_origins}},   # limitar ao /api
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+     expose_headers=["Content-Type", "Authorization"],
+)
 
     # preflight quick response
     from flask import request
