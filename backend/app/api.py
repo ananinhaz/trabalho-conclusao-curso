@@ -678,41 +678,36 @@ def recomendacoes():
     if X_animals.size == 0:
         return jsonify(_rows_to_payload([], []))
 
-    # --- FORÇAR USO DO SKLEARN NearestNeighbors(wminkowski) -------------------
-    # Retorna erro claro se sklearn não estiver instalado/compatível (assim você
-    # mostra no TCC que efetivamente usou a biblioteca e não um fallback manual).
+    # --- calcular distâncias usando sklearn pairwise_distances (compatível com TCC) ---
     try:
-        from sklearn.neighbors import NearestNeighbors
+        # importa explicitamente a função de pairwise (garante que estamos usando sklearn)
+        from sklearn.metrics import pairwise_distances as sk_pairwise_distances
         import sklearn
         sklearn_version = getattr(sklearn, "__version__", "unknown")
     except Exception as e:
         return jsonify({
             "ok": False,
             "error": "sklearn_required",
-            "message": "scikit-learn não está instalado ou tem versão incompatível. Instale scikit-learn>=1.0 e redeploy.",
+            "message": "scikit-learn não está instalado ou não é importável. Instale scikit-learn e redeploy.",
             "detail": str(e)
         }), 500
 
-    k = min(len(X_animals), n)
     try:
-        nbrs = NearestNeighbors(
-            n_neighbors=k,
-            metric='wminkowski',
+        # calcula distâncias ponderadas (minkowski com weights VEC_WEIGHTS)
+        distances = sk_pairwise_distances(
+            user_vec_np,
+            X_animals,
+            metric='minkowski',
             p=2,
-            metric_params={'w': VEC_WEIGHTS}
-        )
-        nbrs.fit(X_animals)
-        distances_all, indices = nbrs.kneighbors(user_vec_np, n_neighbors=k)
-        # build full distances array (inf para não solicitados)
-        distances = np.full(X_animals.shape[0], float("inf"), dtype=float)
-        for pos, idx in enumerate(indices[0]):
-            distances[idx] = float(distances_all[0][pos])
-        method_used = f"NearestNeighbors(wminkowski) sklearn {sklearn_version}"
+            w=VEC_WEIGHTS
+        )[0]
+        method_used = f"pairwise_distances(minkowski,w) sklearn {sklearn_version}"
     except Exception as exc:
+        # devolve erro detalhado para facilitar debug no deploy (não quebra em silêncio)
         return jsonify({
             "ok": False,
-            "error": "sklearn_wminkowski_error",
-            "message": "Erro ao usar NearestNeighbors(wminkowski). Verifique versão do scikit-learn e redeploy.",
+            "error": "sklearn_pairwise_error",
+            "message": "Erro ao calcular distâncias com sklearn.metrics.pairwise_distances.",
             "detail": str(exc)
         }), 500
 
@@ -790,7 +785,7 @@ def adopt_animal(aid: int):
         current_app.logger.error("ERROR adopt_animal: %s\n%s", str(e), tb)
         return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
     finally:
-        try:
+        try: 
             if cur: cur.close()
         except Exception: pass
         try:
