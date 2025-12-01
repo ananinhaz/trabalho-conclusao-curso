@@ -2,19 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 
-/**
- * Login page
- *
- * - POST /api/auth/login { email, senha }
- * - expects JSON { ok: true, access_token, user } on success
- * - stores token in localStorage under 'access_token'
- */
-
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // try to read ?next=... from querystring
   const params = new URLSearchParams(location.search);
   const initialNext = params.get("next") || "/perfil-adotante";
 
@@ -24,22 +14,22 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState(null);
 
-  useEffect(() => {
-    setNext(initialNext);
-  }, [initialNext]);
+  useEffect(() => setNext(initialNext), [initialNext]);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg(null);
-
     if (!email || !senha) {
       setMsg({ type: "error", text: "Preencha email e senha." });
       return;
     }
-
     setLoading(true);
+
     try {
-      const res = await fetch("/api/auth/login", {
+      const API = import.meta.env.VITE_API_URL || "";
+      const url = API.replace(/\/$/, "") + "/auth/login";
+
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
@@ -55,11 +45,9 @@ export default function Login() {
       }
 
       if (js.ok && js.access_token) {
-        // Save token and redirect
         localStorage.setItem("access_token", js.access_token);
         setMsg({ type: "success", text: "Login realizado. Redirecionando..." });
         setTimeout(() => {
-          // redirect to next
           window.location.href = next || "/perfil-adotante";
         }, 400);
       } else {
@@ -75,17 +63,17 @@ export default function Login() {
 
   function goToRegister() {
     const target = `/register?next=${encodeURIComponent(next || "/perfil-adotante")}`;
-    // use router navigate or plain location (keeping behavior consistent)
     navigate(target);
   }
 
   function loginWithGoogle() {
-    // open backend oauth entry (backend will redirect to Google)
-    const url = `/api/auth/google?next=${encodeURIComponent(next || "/perfil-adotante")}`;
-    window.location.href = url;
+    const API = import.meta.env.VITE_API_URL || "";
+    window.location.href = API.replace(/\/$/, "") + "/auth/google?next=" + encodeURIComponent(next || "/perfil-adotante");
   }
 
   return (
+
+
     <div style={styles.container}>
       <h1 style={styles.title}>Entrar</h1>
 
