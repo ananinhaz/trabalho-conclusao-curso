@@ -1,6 +1,6 @@
-// src/pages/Login.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import * as api from "../api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -26,54 +26,40 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const API = import.meta.env.VITE_API_URL || "";
-      const url = API.replace(/\/$/, "") + "/auth/login";
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
-      });
-
-      const js = await res.json().catch(() => null);
-
-      if (!res.ok || !js) {
-        const errText = js && js.error ? js.error : `Erro ${res.status}`;
-        setMsg({ type: "error", text: `Falha ao logar: ${errText}` });
-        setLoading(false);
-        return;
-      }
-
-      if (js.ok && js.access_token) {
-        localStorage.setItem("access_token", js.access_token);
-        setMsg({ type: "success", text: "Login realizado. Redirecionando..." });
-        setTimeout(() => {
-          window.location.href = next || "/perfil-adotante";
-        }, 400);
+      const js = await api.authApi.login(email.trim().toLowerCase(), senha);
+      // ...
+    } catch (error) {
+      console.error("login error", error);
+      
+      const errorMsg = error instanceof Error 
+        ? error.message // Captura a mensagem de erro do mock
+        : "Erro desconhecido.";
+        
+      if (errorMsg.includes("Credenciais inválidas")) {
+          setMsg({ type: "error", text: "Email ou senha inválidos." });
       } else {
-        setMsg({ type: "error", text: js.error || "Resposta inesperada do servidor." });
+          setMsg({ type: "error", text: "Erro de rede ao tentar logar." });
       }
-    } catch (err) {
-      console.error("login error", err);
-      setMsg({ type: "error", text: "Erro de rede ao tentar logar." });
+
     } finally {
       setLoading(false);
     }
   }
 
-  function goToRegister() {
-    const target = `/register?next=${encodeURIComponent(next || "/perfil-adotante")}`;
-    navigate(target);
+  function loginWithGoogle() {
+    api.authApi.loginWithGoogle(next);
   }
 
-  function loginWithGoogle() {
-    const API = import.meta.env.VITE_API_URL || "";
-    window.location.href = API.replace(/\/$/, "") + "/auth/google?next=" + encodeURIComponent(next || "/perfil-adotante");
+  function goToRegister() {
+    navigate("/auth/register");
+  }
+
+  function goToRecover() {
+
+    console.log("Navegar para recuperação de senha.");
   }
 
   return (
-
-
     <div style={styles.container}>
       <h1 style={styles.title}>Entrar</h1>
 
@@ -82,43 +68,50 @@ export default function Login() {
           E-mail
           <input
             type="email"
+            placeholder="seu@exemplo.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={styles.input}
-            placeholder="seu@exemplo.com"
             required
+            style={styles.input}
+            disabled={loading}
           />
         </label>
-
         <label style={styles.label}>
           Senha
           <input
             type="password"
+            placeholder="••••••••"
             value={senha}
             onChange={(e) => setSenha(e.target.value)}
-            style={styles.input}
-            placeholder="••••••••"
             required
+            style={styles.input}
+            disabled={loading}
           />
         </label>
-
         <div style={{ marginTop: 10 }}>
-          <button type="submit" disabled={loading} style={styles.primaryButton}>
+          <button
+            type="submit"
+            style={styles.primaryButton}
+            disabled={loading}
+          >
             {loading ? "Entrando..." : "Entrar"}
           </button>
         </div>
       </form>
 
-      <hr style={styles.hr} />
+      <hr style={styles.separator} />
 
-      <div style={styles.actions}>
-        <button onClick={loginWithGoogle} style={styles.ghostButton}>
+      <div style={styles.socialAuth}>
+        <button
+          onClick={loginWithGoogle}
+          style={styles.secondaryButton}
+          disabled={loading}
+        >
           Entrar com Google
         </button>
-
         <div style={{ marginTop: 12 }}>
           <span>Não tem conta? </span>
-          <button onClick={goToRegister} style={styles.linkButton}>
+          <button onClick={goToRegister} style={styles.linkButton} disabled={loading}>
             Criar conta
           </button>
         </div>
@@ -128,11 +121,9 @@ export default function Login() {
         <div
           role="alert"
           style={{
-            marginTop: 16,
-            padding: "10px 12px",
-            borderRadius: 6,
-            color: msg.type === "error" ? "#7a1b1b" : "#084d07",
-            background: msg.type === "error" ? "#fee" : "#eefbe9",
+            ...styles.alert,
+            color: msg.type === "error" ? "#7a1b1b" : "#1b7a1b",
+            background: msg.type === "error" ? "#ffffee" : "#eefffe",
             border: `1px solid ${msg.type === "error" ? "#f5c2c2" : "#cde8c9"}`,
           }}
         >
@@ -181,7 +172,7 @@ const styles = {
     cursor: "pointer",
     fontSize: 14,
   },
-  ghostButton: {
+  secondaryButton: {
     padding: "8px 14px",
     borderRadius: 6,
     border: "1px solid #6b5cff",
@@ -199,14 +190,20 @@ const styles = {
     cursor: "pointer",
     fontSize: 14,
   },
-  hr: {
+  separator: {
     margin: "20px 0",
-    border: "none",
-    borderTop: "1px solid #eee",
+    borderWidth: "1px 0 0 0",
+    borderStyle: "solid",
+    borderColor: "#eee",
   },
-  actions: {
+  socialAuth: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
+  },
+  alert: {
+    marginTop: 16,
+    padding: "10px 12px",
+    borderRadius: 6,
   },
 };

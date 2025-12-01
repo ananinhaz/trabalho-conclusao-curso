@@ -7,7 +7,8 @@ import { vi } from 'vitest'
 
 describe('Login (page)', () => {
   afterEach(() => {
-    vi.restoreAllMocks()
+    // Restaura o mock da API após cada teste, garantindo isolamento.
+    vi.restoreAllMocks() 
   })
 
   test('preenche email/senha e chama authApi.login, redireciona após sucesso', async () => {
@@ -27,24 +28,20 @@ describe('Login (page)', () => {
 
     const emailInput = screen.getByLabelText(/e-?mail/i)
     const senhaInput = screen.getByLabelText(/senha/i)
-    // botão de submit (exatamente "Entrar")
     const entrarBtn = screen.getByRole('button', { name: /^Entrar$/i })
 
     await user.type(emailInput, 'test@example.com')
-    await user.type(senhaInput, 'senha123')
+    await user.type(senhaInput, 'password123')
     await user.click(entrarBtn)
 
-    await waitFor(() => {
-      expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'senha123')
-    })
+    expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123')
+
   })
 
   test('quando authApi.login falha, mostra um alerta (ou lida com erro)', async () => {
-    // mock para rejeitar
-    vi.spyOn(api.authApi, 'login').mockRejectedValue(new Error('Credenciais inválidas'))
-
-    // spy no alert ANTES de submeter
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const mockLogin = vi
+      .spyOn(api.authApi, 'login')
+      .mockRejectedValue(new Error('Credenciais inválidas')) 
 
     const user = userEvent.setup()
 
@@ -65,10 +62,9 @@ describe('Login (page)', () => {
     await user.click(entrarBtn)
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalled()
+      expect(screen.getByText('Email ou senha inválidos.')).toBeInTheDocument()
     })
-
-    alertSpy.mockRestore()
+    
   })
 
   test('clica em "Entrar com Google" e chama loginWithGoogle com next', async () => {
@@ -83,7 +79,8 @@ describe('Login (page)', () => {
       </MemoryRouter>
     )
 
-    const googleBtn = screen.getByRole('button', { name: /entrar com google/i })
+    const googleBtn = screen.getByRole('button', { name: /Entrar com Google/i })
+
     await user.click(googleBtn)
 
     await waitFor(() => {
