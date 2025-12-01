@@ -1,111 +1,115 @@
 # backend/app/extensions/oauth.py
+from __future__ import annotations
 import os
-import requests
-from flask import request, current_app
+import logging
+from typing import Optional, Dict, Any
+
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.base_client.errors import MismatchingStateError
+import requests
+from flask import current_app, request
 
 oauth = OAuth()
-
+logger = logging.getLogger("app.oauth")
 
 def init_oauth(app):
     """
-    Inicializa o OAuth e registra o provider 'google' apenas se as envs necessárias existirem.
-    Anexa um fallback safe_authorize_access_token para lidar com MismatchingStateError em alguns setups.
+    Inicializa oauth e registra provider 'google' usando discovery (OIDC).
+    Deixa disponível `oauth.google.safe_authorize_access_token()` (implementado aqui).
     """
     oauth.init_app(app)
 
+    # configurações principais (pegar de env)
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-    # Preferir variáveis explícitas, se não houver, ficará None
-    redirect_uri_env = (os.getenv("GOOGLE_REDIRECT_URI") or os.getenv("GOOGLE_CALLBACK") or "").strip() or None
+    # optional redirect env (used by controller to build redirect statically)
+    redirect_uri_env = os.getenv("GOOGLE_REDIRECT_URI") or os.getenv("GOOGLE_CALLBACK")
 
-    if not client_id or not client_secret:
-        app.logger.warning("init_oauth: GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET ausentes — provider google NÃO será registrado.")
-        return
-
+    # Register google using OpenID Connect discovery metadata (recommended)
+    # If discovery fails for any reason, register minimal endpoints later.
     try:
         oauth.register(
             name="google",
             client_id=client_id,
             client_secret=client_secret,
-            # Using OpenID Connect discovery for endpoints
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
             client_kwargs={"scope": "openid email profile"},
         )
-        app.logger.info("init_oauth: provider 'google' registrado.")
-    except Exception as exc:
-        app.logger.exception("init_oauth: falha ao registrar provider google: %s", exc)
-        return
+        logger.info("oauth: registered google provider using OIDC discovery.")
+    except Exception as e:
+        # fallback: try basic registration if discovery fails (still works if you supply endpoints)
+        logger.exception("oauth: discovery registration failed: %s", e)
+        # you can set explicit endpoints if needed via envs
+        token_endpoint = os.getenv("GOOGLE_TOKEN_ENDPOINT", "https://oauth2.googleapis.com/token")
+        userinfo_endpoint = os.getenv("GOOGLE_USERINFO_ENDPOINT", "https://openidconnect.googleapis.com/v1/userinfo")
+        authorize_endpoint = os.getenv("GOOGLE_AUTH_ENDPOINT", "https://accounts.google.com/o/oauth2/v2/auth")
 
-    # Fallback para troca code -> token caso haja MismatchingStateError (cookies/session perdidos)
+        oauth.register(
+            name="google",
+            client_id=client_id,
+            client_secret=client_secret,
+            access_token_url=token_endpoint,
+            authorize_url=authorize_endpoint,
+            client_kwargs={"scope": "openid email profile"},
+            userinfo_endpoint=userinfo_endpoint,
+        )
+        logger.info("oauth: registered google provider with manual endpoints.")
+
+    # enhance google client with safe_authorize_access_token fallback
+    _patch_safe_authorize(oauth.google)
+
+
+def _patch_safe_authorize(google_client):
+    """
+    Add safe_authorize_access_token() method to the client instance.
+    It will attempt authlib's authorize_access_token() first and if a
+    MismatchingStateError occurs it will perform a manual token exchange
+    (POST to token endpoint) using the 'code' query param.
+    The returned value is a dict similar to authlib token dict.
+    """
     def safe_authorize_access_token():
-        """
-        Tenta o authorize_access_token padrão; se der MismatchingStateError,
-        faz a troca manual POST ao endpoint de token do Google usando
-        o redirect URI vindo da env (se disponível).
-        """
+        # try normal flow first
         try:
-            return oauth.google.authorize_access_token()
-        except MismatchingStateError:
-            current_app.logger.warning("safe_authorize_access_token: MismatchingStateError - tentando fallback manual.")
+            return google_client.authorize_access_token()
+        except MismatchingStateError as mse:
+            current_app.logger.warning("oauth: safe_authorize_access_token: MismatchingStateError - attempting manual token exchange: %s", mse)
+            # fallback manual token exchange
             code = request.args.get("code")
             if not code:
-                current_app.logger.error("safe_authorize_access_token: code ausente nos args; abortando.")
                 raise
 
-            # **Importante**: forçar o uso do redirect_uri vindo da env para evitar invalid_grant
-            if redirect_uri_env:
-                redirect_uri = redirect_uri_env
-            else:
-                # Se não tiver env configurada, usar request.base_url como último recurso (pode causar invalid_grant)
-                current_app.logger.warning(
-                    "safe_authorize_access_token: GOOGLE_REDIRECT_URI/GOOGLE_CALLBACK não definido; usando request.base_url como fallback (pode falhar)."
-                )
-                redirect_uri = request.base_url
+            # determine token endpoint
+            token_endpoint = None
+            userinfo_endpoint = None
+            try:
+                md = google_client.load_server_metadata()
+                token_endpoint = md.get("token_endpoint")
+                userinfo_endpoint = md.get("userinfo_endpoint") or md.get("userinfo_endpoint")  # try both
+            except Exception:
+                token_endpoint = getattr(google_client, "access_token_url", None) or os.getenv("GOOGLE_TOKEN_ENDPOINT")
+                userinfo_endpoint = os.getenv("GOOGLE_USERINFO_ENDPOINT", "https://openidconnect.googleapis.com/v1/userinfo")
 
-            token_endpoint = "https://oauth2.googleapis.com/token"
+            if not token_endpoint:
+                raise RuntimeError("No token endpoint available for manual exchange")
+
             data = {
-                "client_id": client_id,
-                "client_secret": client_secret,
                 "code": code,
+                "client_id": google_client.client_id,
+                "client_secret": google_client.client_secret,
+                "redirect_uri": (os.getenv("GOOGLE_REDIRECT_URI") or request.base_url),
                 "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
             }
+            headers = {"Accept": "application/json"}
+            resp = requests.post(token_endpoint, data=data, headers=headers, timeout=10)
+            # if non-200 raise HTTPError so controller logs properly
+            resp.raise_for_status()
+            token_json = resp.json()
+            # augment token_json with token_type if missing
+            if "token_type" not in token_json:
+                token_json["token_type"] = "Bearer"
+            # Attach userinfo endpoint for later use if available
+            token_json["_userinfo_endpoint"] = userinfo_endpoint
+            return token_json
 
-            current_app.logger.info(
-                "safe_authorize_access_token: POSTing to token endpoint; redirect_uri=%s", redirect_uri
-            )
-
-            try:
-                resp = requests.post(token_endpoint, data=data, timeout=10)
-            except Exception as e:
-                current_app.logger.exception("safe_authorize_access_token: request to token endpoint failed: %s", e)
-                raise
-
-            # Log status e preview do corpo (não logar client_secret)
-            body_preview = (resp.text[:500] + "...") if resp.text and len(resp.text) > 500 else (resp.text or "<empty>")
-            current_app.logger.info(
-                "safe_authorize_access_token: token endpoint returned status=%s body_preview=%s",
-                resp.status_code, body_preview
-            )
-
-            if resp.status_code != 200:
-                # registra o corpo completo em error (útil para debugging), depois raise
-                current_app.logger.error("safe_authorize_access_token: fallback token endpoint returned %s: %s", resp.status_code, resp.text)
-                resp.raise_for_status()
-
-            try:
-                token = resp.json()
-            except ValueError:
-                current_app.logger.error("safe_authorize_access_token: token endpoint returned non-json body: %s", resp.text)
-                raise
-
-            current_app.logger.debug("safe_authorize_access_token: token keys: %s", list(token.keys()))
-            return token
-
-    # Anexa o fallback ao provider (tenta em tempo de execução)
-    try:
-        oauth.google.safe_authorize_access_token = safe_authorize_access_token
-    except Exception:
-        app.logger.exception("init_oauth: não foi possível anexar safe_authorize_access_token ao provider google.")
+    # attach to client
+    setattr(google_client, "safe_authorize_access_token", safe_authorize_access_token)

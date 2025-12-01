@@ -300,12 +300,14 @@ def google_login():
 
 
 # ---------- GOOGLE OAUTH CALLBACK ----------
+# dentro de auth_controller.py: substituir google_callback pelo código abaixo
+
 @bp.get("/google/callback")
 def google_callback():
     current_app.logger.info("google_callback: called; request.args keys=%s session keys=%s",
                             list(request.args.keys()), list(session.keys()))
     try:
-        # usa fallback se disponível
+        # usa safe_authorize_access_token (pode ser o authlib normal ou nosso fallback)
         if getattr(getattr(oauth, "google", None), "safe_authorize_access_token", None):
             token_resp = oauth.google.safe_authorize_access_token()
         else:
@@ -313,20 +315,46 @@ def google_callback():
 
         # token_resp pode ser dict (fallback manual) ou object retornado por authlib
         try:
-            # se for dict (fallback manual), token_resp já é um dict com access_token
             if isinstance(token_resp, dict):
                 current_app.logger.info("google_callback: token_resp keys=%s", list(token_resp.keys()))
             else:
-                # para authlib token object, log keys sem conteúdo sensível
                 current_app.logger.info("google_callback: token obtained (authlib object).")
         except Exception:
             current_app.logger.debug("google_callback: não consegui inspecionar token_resp safely.")
 
-        userinfo = oauth.google.get("userinfo").json()
+        # obter userinfo: primeiro tenta via client.get('userinfo'), se não funcionar
+        userinfo = None
+        try:
+            # authlib client will use metadata userinfo endpoint
+            resp = oauth.google.get("userinfo")
+            userinfo = resp.json()
+        except Exception as e:
+            current_app.logger.warning("google_callback: oauth.google.get('userinfo') falhou: %s", e)
+            # fallback: use explicit endpoint if available (token_resp may include it as _userinfo_endpoint)
+            userinfo_endpoint = None
+            try:
+                # token_resp pode ser dict com _userinfo_endpoint (nossa fallback)
+                if isinstance(token_resp, dict):
+                    userinfo_endpoint = token_resp.get("_userinfo_endpoint")
+            except Exception:
+                userinfo_endpoint = None
+            # fallback to known google endpoint
+            if not userinfo_endpoint:
+                userinfo_endpoint = "https://openidconnect.googleapis.com/v1/userinfo"
+            # request userinfo with access token
+            access_token = token_resp.get("access_token") if isinstance(token_resp, dict) else token_resp.get("access_token")
+            headers = {"Authorization": f"Bearer {access_token}"}
+            r = requests.get(userinfo_endpoint, headers=headers, timeout=10)
+            r.raise_for_status()
+            userinfo = r.json()
+
         current_app.logger.info("google_callback: got userinfo email=%s", userinfo.get("email"))
     except Exception as exc:
         current_app.logger.exception("Google oauth error (callback): %s", exc)
         return jsonify(ok=False, error="OAuth failure"), 400
+
+    # ... (restante do seu código que cria/atualiza usuário e gera token permanece igual)
+
 
     email = userinfo.get("email")
     name = userinfo.get("name") or (email.split("@")[0] if email else "Usuário")
