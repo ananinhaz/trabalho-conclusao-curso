@@ -745,57 +745,59 @@ def recomendacoes():
 @bp_api.patch("/animais/<int:aid>/adopt")
 def adopt_animal(aid: int):
     uid = _require_auth()
-    if not uid: return _json_error("unauthenticated", 401)
+    if not uid:
+        return _json_error("unauthenticated", 401)
     data = request.get_json(silent=True) or {}
     action = (data.get("action") or "mark").lower()
     if action not in ("mark", "undo"):
         return _json_error("invalid_action")
-    conn = None
-    cur = None
-    cur2 = None
+
     try:
-        conn = db_ext.get_conn()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
-        owner = cur.fetchone()
-        if not owner: return _json_error("not found", 404)
-        if int(owner.get("doador_id") or 0) != int(uid): return _json_error("forbidden", 403)
-        if action == "mark":
-            cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
-        else:
-            cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
-        try: conn.commit()
-        except Exception: pass
-        cur2 = conn.cursor(dictionary=True)
-        cur2.execute(
-            """
-            SELECT id, nome, especie, raca, idade, porte, descricao,
-                   cidade, photo_url, donor_name, donor_whatsapp,
-                   doador_id, criado_em AS created_at, energia, bom_com_criancas,
-                   adotado_em
-              FROM animais
-             WHERE id=%s
-            """,
-            (aid,),
-        )
-        row = cur2.fetchone()
+        # usa o contexto padrão (devolve conn compatível com cursor(dictionary=True))
+        with db_ext.db() as conn:
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
+                owner = cur.fetchone()
+                if not owner:
+                    return _json_error("not found", 404)
+                if int(owner.get("doador_id") or 0) != int(uid):
+                    return _json_error("forbidden", 403)
+
+                if action == "mark":
+                    cur.execute("UPDATE animais SET adotado_em = NOW() WHERE id=%s", (aid,))
+                else:
+                    cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
+
+            # tenta commit (alguns adaptadores fazem commit no contexto)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+
+            # busca o registro atualizado
+            with conn.cursor(dictionary=True) as cur2:
+                cur2.execute(
+                    """
+                    SELECT id, nome, especie, raca, idade, porte, descricao,
+                           cidade, photo_url, donor_name, donor_whatsapp,
+                           doador_id, criado_em AS created_at, energia, bom_com_criancas,
+                           adotado_em
+                      FROM animais
+                     WHERE id=%s
+                    """,
+                    (aid,),
+                )
+                row = cur2.fetchone()
+
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
         current_app.logger.error("ERROR adopt_animal: %s\n%s", str(e), tb)
         return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
-    finally:
-        try: 
-            if cur: cur.close()
-        except Exception: pass
-        try:
-            if cur2: cur2.close()
-        except Exception: pass
-        try:
-            if conn: conn.close()
-        except Exception: pass
+
     if not row:
         return _json_error("not found", 404)
+
     if row.get("adotado_em") is not None:
         try:
             row["adotado_em"] = row["adotado_em"].isoformat()
@@ -804,6 +806,7 @@ def adopt_animal(aid: int):
     if "bom_com_criancas" in row:
         row["bom_com_criancas"] = _normalize_to_int_bool(row.get("bom_com_criancas"))
     return jsonify({"ok": True, "animal": _row_to_animal(row)})
+
 
 # --- metrics/adoptions -----------------------------------------------------
 @bp_api.get("/animais/metrics/adoptions")
