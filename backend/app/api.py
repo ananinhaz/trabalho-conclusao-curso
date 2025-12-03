@@ -1,4 +1,3 @@
-# api.py
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, session, current_app
 import os
@@ -11,7 +10,6 @@ import numpy as np
 
 from .extensions import db as db_ext
 
-# opcional: pyjwt para validação de token (se JWT_SECRET definido)
 try:
     import jwt as pyjwt
 except Exception:
@@ -19,7 +17,7 @@ except Exception:
 
 bp_api = Blueprint("api", __name__)
 
-# --- IA — PESOS (conforme TCC) ---
+# --- IA — PESOS 
 VEC_WEIGHTS = np.array([
     1.0,  # moradia / porte/especie
     1.0,  # bom_com_criancas
@@ -27,7 +25,7 @@ VEC_WEIGHTS = np.array([
     1.0   # estilo de vida
 ])
 
-# --- utilitários db / ambiente ---------------------------------------------
+# --- utilitários db / ambiente 
 def is_postgres() -> bool:
     try:
         fn = getattr(db_ext, "using_postgres", None)
@@ -40,7 +38,7 @@ def is_postgres() -> bool:
     except Exception:
         return False
 
-# --- JWT helpers -----------------------------------------------------------
+# --- JWT helpers 
 JWT_SECRET = os.environ.get("JWT_SECRET")
 JWT_ALGS = ["HS256"]
 
@@ -114,7 +112,7 @@ def _require_auth() -> Optional[int]:
                     pass
     return None
 
-# --- normalizações mínimas conforme TCC ----------------------------------
+# --- normalizações 
 def to_bool_like(v):
     """
     Normalização básica conforme uso no TCC:
@@ -172,7 +170,7 @@ def _json_error(msg: str, code: int = 400):
 def _rows_to_payload(rows, ids):
     return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
 
-# --- IA: vetorização conforme TCC -----------------------------------------
+# --- IA: vetorização 
 def _build_user_vector(perfil: dict) -> list[float]:
     tipo_moradia = (perfil.get("tipo_moradia") or "").strip().lower()
     tem_criancas = to_bool_like(perfil.get("tem_criancas"))
@@ -240,7 +238,7 @@ def _build_animal_vector(a: dict) -> list[float]:
 
     return [v0, v1, v2, v3]
 
-# --- Rotas: PERFIL ADOTANTE -----------------------------------------------
+# --- Rotas: PERFIL ADOTANTE 
 @bp_api.get("/perfil_adotante")
 def get_perfil_adotante():
     uid = _require_auth()
@@ -311,7 +309,7 @@ def upsert_perfil_adotante():
                 )
     return jsonify({"ok": True})
 
-# --- Rotas: ANIMAIS (list, create, get, update, delete, mine) -------------
+# --- Rotas: ANIMAIS (list, create, get, update, delete, mine) 
 @bp_api.get("/animais")
 def list_animais():
     especie = request.args.get("especie") or ""
@@ -538,7 +536,7 @@ def animais_mine():
             rows = cur.fetchall() or []
     return jsonify([_row_to_animal(r) for r in rows])
 
-# --- RECOMENDAÇÕES: rotina principal (TCC) -------------------------------
+# --- RECOMENDAÇÕES
 @bp_api.get("/recomendacoes")
 def recomendacoes():
     n = int(request.args.get("n") or 6)
@@ -640,7 +638,7 @@ def recomendacoes():
             )
             animals = cur.fetchall() or []
 
-    # aplica filtros rígidos (como no TCC)
+    # aplica filtros rígidos(fixos
     tm = (perfil.get("tipo_moradia") or "").lower()
     try:
         tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
@@ -678,9 +676,9 @@ def recomendacoes():
     if X_animals.size == 0:
         return jsonify(_rows_to_payload([], []))
 
-    # --- calcular distâncias usando sklearn pairwise_distances (compatível com TCC) ---
+    # --- calcular distâncias usando sklearn pairwise_distances
     try:
-        # importa explicitamente a função de pairwise (garante que estamos usando sklearn)
+        # importa explicitamente a função de pairwise
         from sklearn.metrics import pairwise_distances as sk_pairwise_distances
         import sklearn
         sklearn_version = getattr(sklearn, "__version__", "unknown")
@@ -703,7 +701,6 @@ def recomendacoes():
         )[0]
         method_used = f"pairwise_distances(minkowski,w) sklearn {sklearn_version}"
     except Exception as exc:
-        # devolve erro detalhado para facilitar debug no deploy (não quebra em silêncio)
         return jsonify({
             "ok": False,
             "error": "sklearn_pairwise_error",
@@ -716,7 +713,6 @@ def recomendacoes():
     top = [a for _, a in scored[:n]]
     ids = [a["id"] for a in top]
 
-    # se debug=1 devolve metadata para confirmação
     if str(request.args.get("debug") or "").strip() == "1":
         debug_user_vec = user_vec
         debug_sample = []
@@ -741,7 +737,7 @@ def recomendacoes():
 
     return jsonify(_rows_to_payload(top, ids))
 
-# --- marcar/desmarcar adotado_em ------------------------------------------
+# --- marcar/desmarcar adotado_em 
 @bp_api.patch("/animais/<int:aid>/adopt")
 def adopt_animal(aid: int):
     uid = _require_auth()
@@ -768,7 +764,6 @@ def adopt_animal(aid: int):
                 else:
                     cur.execute("UPDATE animais SET adotado_em = NULL WHERE id=%s", (aid,))
 
-            # tenta commit (alguns adaptadores fazem commit no contexto)
             try:
                 conn.commit()
             except Exception:
@@ -808,7 +803,7 @@ def adopt_animal(aid: int):
     return jsonify({"ok": True, "animal": _row_to_animal(row)})
 
 
-# --- metrics/adoptions -----------------------------------------------------
+# --- metrics/adoptions 
 @bp_api.get("/animais/metrics/adoptions")
 def adoption_metrics():
     try:
@@ -843,6 +838,6 @@ def adoption_metrics():
         result.append({"day": ds, "count": counts.get(ds, 0)})
     return jsonify({"ok": True, "days": result})
 
-# --- registro blueprint ----------------------------------------------------
+# --- registro blueprint 
 def register_blueprints(app):
     app.register_blueprint(bp_api, url_prefix="/api")
