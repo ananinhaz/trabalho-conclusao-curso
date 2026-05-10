@@ -1,31 +1,14 @@
-from flask import Blueprint, jsonify, request
-from ..services import animal_service as svc
+﻿"""Compatibility blueprint for animal routes.
 
-bp = Blueprint("animais", __name__, url_prefix="/animais")
+The canonical implementation lives in app.api.
+This module keeps backward-compatible symbols for imports/tests.
+"""
+from flask import Blueprint
+from app.api import list_animais, create_animal, get_animal as get_animal_by_id, update_animal, delete_animal
 
-@bp.get("")
-def list_animais():
-    # repassa os filtros da querystring para o service
-    return jsonify(svc.listar(request.args))
-
-@bp.get("/<int:aid>")
-def get_animal(aid):
-    row = svc.obter(aid)
-    return (jsonify(row), 200) if row else (jsonify({"erro": "não encontrado"}), 404)
-
-@bp.post("")
-def create_animal():
-    data = request.get_json() or {}
-    novo = svc.criar(data)
-    return jsonify(novo), 201
-
-@bp.put("/<int:aid>")
-def update_animal(aid):
-    data = request.get_json() or {}
-    ok = svc.atualizar(aid, data)
-    return (jsonify({"ok": True}), 200) if ok else (jsonify({"erro": "não encontrado"}), 404)
-
-@bp.delete("/<int:aid>")
-def delete_animal(aid):
-    ok = svc.remover(aid)
-    return (jsonify({"ok": True}), 200) if ok else (jsonify({"erro": "não encontrado"}), 404)
+bp = Blueprint("animal_controller", __name__)
+bp.add_url_rule("/animais", view_func=list_animais, methods=["GET"])
+bp.add_url_rule("/animais", view_func=create_animal, methods=["POST"])
+bp.add_url_rule("/animais/<int:aid>", view_func=get_animal_by_id, methods=["GET"])
+bp.add_url_rule("/animais/<int:aid>", view_func=update_animal, methods=["PUT", "PATCH"])
+bp.add_url_rule("/animais/<int:aid>", view_func=delete_animal, methods=["DELETE"])

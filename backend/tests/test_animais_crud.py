@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 pytestmark = pytest.mark.integration
 
 
@@ -25,11 +25,11 @@ def test_criar_e_listar_animal(client, monkeypatch):
         sess["user_id"] = 3
 
     # POST para criar
-    r = client.post("/animais", json=novo)
+    r = client.post("/api/animais", json=novo)
     assert r.status_code in (200, 201), f"status {r.status_code} / body: {r.get_data(as_text=True)}"
 
     # GET para listar e verificar que o item criado (ou pelo menos o nome) aparece
-    lista = client.get("/animais").get_json()
+    lista = client.get("/api/animais").get_json()
     items = lista["items"] if isinstance(lista, dict) and "items" in lista else lista
     assert any(a.get("nome") == "Bolt" for a in items), f"esperava 'Bolt' em items, body={lista}"
 

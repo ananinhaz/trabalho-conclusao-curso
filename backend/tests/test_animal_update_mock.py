@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 import random
 from unittest.mock import patch
 from app.extensions.db import db
@@ -22,7 +22,7 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
     senha = "123"
 
     # Registrar
-    reg = client.post("/auth/register", json={
+    reg = client.post("/api/auth/register", json={
         "nome": "Dono Mock", "email": email, "senha": senha
     })
     assert reg.status_code in (200, 201), "Erro no registro do usuÃ¡rio mock"
@@ -45,7 +45,7 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
         "cidade": "Rio",
         "idade": 2 
     }
-    resp = client.post("/animais", json=payload_criacao)
+    resp = client.post("/api/animais", json=payload_criacao)
 
     assert resp.status_code == 200, f"Erro ao criar animal (mock): {resp.get_data(as_text=True)}"
 
@@ -62,20 +62,20 @@ def test_animal_crud_full_cycle_mocked(mock_require_auth, client):
         "idade": 3, 
         "adotado_em": datetime.now().strftime("%Y-%m-%d %H:%M:%S") 
     }
-    resp_upd = client.put(f"/animais/{animal_id}", json=payload_edicao)
+    resp_upd = client.put(f"/api/animais/{animal_id}", json=payload_edicao)
     assert resp_upd.status_code == 200, f"Erro ao editar animal: {resp_upd.get_data(as_text=True)}"
 
     # Verifica se salvou
-    get_anim = client.get(f"/animais/{animal_id}")
+    get_anim = client.get(f"/api/animais/{animal_id}")
     dados_novos = get_anim.get_json()
     assert dados_novos["nome"] == "Toto Editado Mock"
     
     # DELETE
-    resp_del = client.delete(f"/animais/{animal_id}")
+    resp_del = client.delete(f"/api/animais/{animal_id}")
     assert resp_del.status_code == 200, f"Erro ao deletar animal: {resp_del.get_data(as_text=True)}"
 
     # Verifica se sumiu 
-    get_anim_2 = client.get(f"/animais/{animal_id}")
+    get_anim_2 = client.get(f"/api/animais/{animal_id}")
     assert get_anim_2.status_code == 404
 
     # Limpa o mock

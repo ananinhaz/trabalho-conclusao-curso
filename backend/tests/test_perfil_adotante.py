@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 pytestmark = pytest.mark.integration
 
 from flask import jsonify, request
@@ -22,11 +22,11 @@ def test_get_perfil_adotante(client):
     app = client.application
     _clear_before_request(app)
 
-    ep_get = _find_endpoint_for_path_and_method(app, "/perfil_adotante", "GET")
-    assert ep_get, "endpoint GET /perfil_adotante not found"
+    ep_get = _find_endpoint_for_path_and_method(app, "/api/perfil_adotante", "GET")
+    assert ep_get, "endpoint GET /api/perfil_adotante not found"
     app.view_functions[ep_get] = lambda: jsonify({"nome": "Ana", "cidade": "Curitiba"})
 
-    r = client.get("/perfil_adotante")
+    r = client.get("/api/perfil_adotante")
     assert r.status_code == 200
     js = r.get_json()
     assert js.get("nome") == "Ana"
@@ -35,15 +35,15 @@ def test_post_perfil_adotante(client):
     app = client.application
     _clear_before_request(app)
 
-    ep_post = _find_endpoint_for_path_and_method(app, "/perfil_adotante", "POST")
-    assert ep_post, "endpoint POST /perfil_adotante not found"
+    ep_post = _find_endpoint_for_path_and_method(app, "/api/perfil_adotante", "POST")
+    assert ep_post, "endpoint POST /api/perfil_adotante not found"
     def fake_upsert():
         payload = request.get_json() or {}
         return jsonify({"ok": True, "saved": payload}), 200
     app.view_functions[ep_post] = fake_upsert
 
     payload = {"nome": "Novo", "cidade": "X"}
-    r = client.post("/perfil_adotante", json=payload)
+    r = client.post("/api/perfil_adotante", json=payload)
     assert r.status_code in (200, 201)
     js = r.get_json()
     assert js.get("saved", {}).get("nome") == "Novo"

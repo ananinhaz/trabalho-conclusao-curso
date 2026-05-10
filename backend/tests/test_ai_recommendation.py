@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 pytestmark = pytest.mark.integration
 
 import pytest
@@ -11,7 +11,7 @@ def test_recommendation_flow(client):
     """
     #  Cria um usuÃ¡rio e perfil para ter base de comparaÃ§Ã£o
     email = "ia_test_user@example.com"
-    client.post("/auth/register", json={
+    client.post("/api/auth/register", json={
         "nome": "IA User", "email": email, "senha": "123"
     })
     
@@ -26,7 +26,7 @@ def test_recommendation_flow(client):
     with client.session_transaction() as sess:
         sess["user_id"] = uid
         
-    client.post("/perfil_adotante", json={
+    client.post("/api/perfil_adotante", json={
         "tipo_moradia": "casa",
         "tem_criancas": 1,
         "tempo_disponivel_horas_semana": 20,
@@ -35,20 +35,20 @@ def test_recommendation_flow(client):
 
     # Cria alguns animais variados para a IA processar
     # Cachorro agitado (Match bom)
-    client.post("/animais", json={
+    client.post("/api/animais", json={
         "nome": "Rex", "especie": "cachorro", "idade": "adulto",
         "porte": "grande", "descricao": "Agitado", "cidade": "SP",
         "energia": "alta", "bom_com_criancas": 1
     })
     
     # Gato calmo (Match ruim para quem quer agito)
-    client.post("/animais", json={
+    client.post("/api/animais", json={
         "nome": "Miau", "especie": "gato", "idade": "idoso",
         "porte": "pequeno", "descricao": "Calmo", "cidade": "SP"
     })
 
     # Chama a rota de recomendaÃ§Ã£o
-    resp = client.get("/recomendacoes?n=5")
+    resp = client.get("/api/recomendacoes?n=5")
     assert resp.status_code == 200
     data = resp.get_json()
     

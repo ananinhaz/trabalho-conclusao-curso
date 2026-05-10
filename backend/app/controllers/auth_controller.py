@@ -16,12 +16,11 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
-import app.extensions.db as db_module
-db = getattr(db_module, "db", None)
+from app.extensions.db import db  # Fix: import db directly for context-manager API
+import app.extensions.db as db_module  # For using_postgres()
 
 # oauth provider inicializado via init_oauth
 from app.extensions.oauth import oauth
-
 
 bp = Blueprint("auth", __name__, url_prefix="")
 

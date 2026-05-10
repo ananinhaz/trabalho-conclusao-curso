@@ -1,9 +1,10 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import os
+import sqlite3
 from contextlib import contextmanager
 from typing import Optional, Any, Dict
 
-# MySQL imports 
+# MySQL imports
 try:
     from mysql.connector.pooling import MySQLConnectionPool
     from mysql.connector import connect as mysql_connect
@@ -29,22 +30,125 @@ except Exception:
 _mysql_pool: Optional["MySQLConnectionPool"] = None
 _pg_pool: Optional["ThreadedConnectionPool"] = None
 _using_postgres: bool = False
+_using_sqlite: bool = False
+_sqlite_path: Optional[str] = None
 
 
 def using_postgres() -> bool:
-    """Getter simples para saber qual driver está em uso."""
+    """Getter simples para saber qual driver estÃ¡ em uso."""
     return _using_postgres
+
+
+def using_sqlite() -> bool:
+    """True quando DATABASE_URL aponta para SQLite (testes e dev local)."""
+    return _using_sqlite
+
+
+class _SQLiteCursorWrapper:
+    """Wrapper para cursor SQLite: converte %s -> ? e suporta dictionary=True."""
+
+    def __init__(self, cur, dict_mode=False):
+        self._cur = cur
+        self._dict = dict_mode
+
+    def execute(self, sql, params=None):
+        if params is None:
+            params = ()
+        sql_converted = sql.replace("%s", "?")
+        return self._cur.execute(sql_converted, params)
+
+    def executemany(self, sql, seq_of_params):
+        sql_converted = sql.replace("%s", "?")
+        return self._cur.executemany(sql_converted, seq_of_params)
+
+    def fetchone(self):
+        row = self._cur.fetchone()
+        if row is None:
+            return None
+        return dict(row) if self._dict else row
+
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        return [dict(r) for r in rows] if self._dict else rows
+
+    def close(self):
+        try:
+            self._cur.close()
+        except Exception:
+            pass
+
+    @property
+    def lastrowid(self):
+        return self._cur.lastrowid
+
+    @property
+    def rowcount(self):
+        try:
+            return self._cur.rowcount
+        except Exception:
+            return -1
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+
+class _SQLiteConnectionWrapper:
+    """Wrapper para conexÃ£o SQLite compatÃ­vel com MySQL cursor(dictionary=True)."""
+
+    def __init__(self, path):
+        self._path = path
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+
+    def cursor(self, dictionary=False):
+        cur = self._conn.cursor()
+        return _SQLiteCursorWrapper(cur, dict_mode=bool(dictionary))
+
+    def commit(self):
+        try:
+            self._conn.commit()
+        except Exception:
+            pass
+
+    def rollback(self):
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+    def __getattr__(self, item):
+        return getattr(self._conn, item)
 
 
 def init_db(app=None):
     """
     Inicializa pool de conexão:
-    - Se DATABASE_URL estiver definida, tenta inicializar pool Postgres (psycopg2 ThreadedConnectionPool).
-    - Caso contrário, inicializa o pool MySQL como antes (se mysql disponível).
+    - Se DATABASE_URL começar com sqlite:, usa SQLite (testes e dev local).
+    - Se DATABASE_URL for postgres://, usa pool Postgres (psycopg2).
+    - Caso contrário, usa pool MySQL (DB_HOST, DB_PORT, etc.).
     """
-    global _mysql_pool, _pg_pool, _using_postgres
+    global _mysql_pool, _pg_pool, _using_postgres, _using_sqlite, _sqlite_path
 
-    database_url = os.getenv("DATABASE_URL")
+    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    if os.getenv("PYTEST_CURRENT_TEST") and "postgres" in database_url:
+        raise RuntimeError("Tests cannot use the production database")
+
+    if database_url and database_url.lower().split(":", 1)[0] == "sqlite":
+        _using_sqlite = True
+        _using_postgres = False
+        path = database_url.replace("sqlite:///", "").split("?")[0]
+        _sqlite_path = path
+        return
+
     pool_size = int(os.getenv("DB_POOL_SIZE", "12"))
     timeout = int(os.getenv("DB_TIMEOUT", "5"))
 
@@ -57,6 +161,7 @@ def init_db(app=None):
         maxconn = max(1, pool_size)
 
         # ThreadedConnectionPool aceita dsn (connection string)
+        global _pg_pool
         _pg_pool = ThreadedConnectionPool(minconn, maxconn, dsn=database_url)
         _using_postgres = True
 
@@ -94,6 +199,7 @@ def init_db(app=None):
         finally:
             conn.close()
 
+        global _mysql_pool
         _mysql_pool = MySQLConnectionPool(
             pool_name=os.getenv("DB_POOL_NAME", "adoptme_pool"),
             pool_size=pool_size,
@@ -104,12 +210,15 @@ def init_db(app=None):
 
 
 def _get_raw_conn():
-    """Retorna a conexão bruta (psycopg2 connection ou mysql connector connection)."""
-    global _mysql_pool, _pg_pool, _using_postgres
+    """Retorna a conexÃ£o bruta (psycopg2, mysql connector ou SQLite wrapper)."""
+    global _mysql_pool, _pg_pool, _using_postgres, _using_sqlite, _sqlite_path
+
+    if _using_sqlite and _sqlite_path:
+        return _SQLiteConnectionWrapper(_sqlite_path)
 
     if _using_postgres:
         if _pg_pool is None:
-            raise RuntimeError("Pool Postgres não inicializado. Chame init_db() primeiro.")
+            raise RuntimeError("Pool Postgres nÃ£o inicializado. Chame init_db() primeiro.")
         conn = _pg_pool.getconn()
         
         try:
@@ -119,9 +228,9 @@ def _get_raw_conn():
         return conn
     else:
         if _mysql_pool is None:
-            raise RuntimeError("Pool MySQL não inicializado. Chame init_db() primeiro.")
+            raise RuntimeError("Pool MySQL nÃ£o inicializado. Chame init_db() primeiro.")
         conn = _mysql_pool.get_connection()
-        # reconectar se necessário
+        # reconectar se necessÃ¡rio
         try:
             if hasattr(conn, "is_connected") and not conn.is_connected():
                 conn.reconnect(attempts=1, delay=0)
@@ -135,18 +244,18 @@ def _get_raw_conn():
 
 def get_conn():
     """
-    Backwards-compatible: retorna a conexão crua (psycopg2 connection ou mysql connector connection).
-    Isso é para compatibilidade com módulos antigos que importavam get_conn() diretamente.
-    NOTE: quem usar get_conn() deve fechar a conexão depois (ou usar db() context manager).
+    Backwards-compatible: retorna a conexÃ£o crua (psycopg2 connection ou mysql connector connection).
+    Isso Ã© para compatibilidade com mÃ³dulos antigos que importavam get_conn() diretamente.
+    NOTE: quem usar get_conn() deve fechar a conexÃ£o depois (ou usar db() context manager).
     """
     return _get_raw_conn()
 
 
 class ConnProxy:
     """
-    Pequena wrapper para tornar a API de cursor compatível com o código que usa
-    conn.cursor(dictionary=True) (MySQL) — no Postgres mapeamos para RealDictCursor.
-    Também expõe commit/rollback/close e mantém referência ao raw conn e ao pool.
+    Pequena wrapper para tornar a API de cursor compatÃ­vel com o cÃ³digo que usa
+    conn.cursor(dictionary=True) (MySQL) â€” no Postgres mapeamos para RealDictCursor.
+    TambÃ©m expÃµe commit/rollback/close e mantÃ©m referÃªncia ao raw conn e ao pool.
     """
     def __init__(self, raw_conn: Any):
         self._raw = raw_conn
@@ -156,7 +265,6 @@ class ConnProxy:
         Suporta chamada cur = conn.cursor(dictionary=True) (compat com MySQL).
         Para Postgres, converte dictionary=True para cursor_factory=RealDictCursor.
         """
-        # detecta flag compat
         dict_flag = False
         if "dictionary" in kwargs:
             dict_flag = kwargs.pop("dictionary")
@@ -180,8 +288,8 @@ class ConnProxy:
 
     def close(self):
         """
-        Fechar: para Postgres colocamos a conexão de volta no pool (putconn).
-        Para MySQL, fechamos a conexão (que devolve ao pool do mysql-connector).
+        Fechar: para Postgres colocamos a conexÃ£o de volta no pool (putconn).
+        Para MySQL, fechamos a conexÃ£o (que devolve ao pool do mysql-connector).
         """
         try:
             if _using_postgres:
@@ -214,10 +322,10 @@ class ConnProxy:
 
 
 @contextmanager
-def db():
+def _db_context_manager():
     """
     Context manager que devolve uma ConnProxy.
-    Faz commit ao final (se não houve exceção) e rollback em caso de erro.
+    Faz commit ao final (se nÃ£o houve exceÃ§Ã£o) e rollback em caso de erro.
     Uso:
         with db() as conn:
             cur = conn.cursor(dictionary=True)
@@ -227,7 +335,6 @@ def db():
     proxy = ConnProxy(conn)
     try:
         yield proxy
-
         try:
             proxy.commit()
         except Exception:
@@ -243,3 +350,8 @@ def db():
             proxy.close()
         except Exception:
             pass
+
+# Export the db context manager for import by other modules.
+# Usage: from app.extensions.db import db
+db = _db_context_manager
+

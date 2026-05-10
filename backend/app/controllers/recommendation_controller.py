@@ -1,18 +1,10 @@
-from flask import Blueprint, request, jsonify
-from ..services.recommendation_service import recomendar
+﻿"""Compatibility blueprint for recommendation routes.
 
-bp = Blueprint("recomendacao", __name__, url_prefix="/recomendacoes")
+The canonical implementation lives in app.api.
+"""
+from flask import Blueprint
+from app.api import recomendacoes
 
-@bp.get("")
-def get_recomendacoes():
-    usuario_id = request.args.get("usuario_id", type=int)
-    top_n = request.args.get("n", default=10, type=int)
-    params = {
-        "especie_pref": request.args.get("especie_pref"),
-        "idade_min": request.args.get("idade_min"),
-        "idade_max": request.args.get("idade_max"),
-        "porte": request.args.get("porte"),
-        "cidade": request.args.get("cidade"),
-    }
-    recs = recomendar(usuario_id, params, top_n=top_n)
-    return jsonify(recs), 200
+bp = Blueprint("recommendation_controller", __name__)
+get_recommendations_for_user = recomendacoes
+bp.add_url_rule("/recomendacoes", view_func=recomendacoes, methods=["GET"])

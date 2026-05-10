@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 pytestmark = pytest.mark.integration
 
 import importlib
@@ -27,7 +27,7 @@ def test_recomendacoes_controller_retorna_items_mockados(client):
     app.view_functions["api.recomendacoes"] = fake_recomendacoes_view
 
     # chama a rota real
-    resp = client.get("/recomendacoes")
+    resp = client.get("/api/recomendacoes")
     assert resp.status_code == 200, f"GET /recomendacoes retornou {resp.status_code} body={resp.get_data(as_text=True)}"
 
     data = resp.get_json()

@@ -38,7 +38,22 @@ def is_postgres() -> bool:
     except Exception:
         return False
 
+<<<<<<< HEAD
 # --- JWT helpers 
+=======
+
+def is_sqlite() -> bool:
+    """True quando o DB é SQLite (testes/dev local). SQLite usa ON CONFLICT como Postgres."""
+    try:
+        fn = getattr(db_ext, "using_sqlite", None)
+        if callable(fn):
+            return bool(fn())
+    except Exception:
+        pass
+    return False
+
+# --- JWT helpers -----------------------------------------------------------
+>>>>>>> 5e64d5a (fix: ajuste nos testes)
 JWT_SECRET = os.environ.get("JWT_SECRET")
 JWT_ALGS = ["HS256"]
 
@@ -277,7 +292,7 @@ def upsert_perfil_adotante():
         return _json_error("Dados obrigatórios ausentes")
     with db_ext.db() as conn:
         with conn.cursor() as cur:
-            if is_postgres():
+            if is_postgres() or is_sqlite():
                 cur.execute(
                     """
                     INSERT INTO perfil_adotante

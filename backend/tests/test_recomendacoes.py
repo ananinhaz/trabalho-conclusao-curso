@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 pytestmark = pytest.mark.integration
 
 from flask import jsonify
@@ -22,13 +22,13 @@ def test_get_recomendacoes(client):
     app = client.application
     _clear_before_request(app)
 
-    ep = _find_endpoint_for_path_and_method(app, "/recomendacoes", "GET")
-    assert ep, "endpoint GET /recomendacoes not found"
+    ep = _find_endpoint_for_path_and_method(app, "/api/recomendacoes", "GET")
+    assert ep, "endpoint GET /api/recomendacoes not found"
 
     fake = [{"id": 1, "nome": "Rex", "score": 0.9}]
     app.view_functions[ep] = lambda: jsonify(fake)
 
-    r = client.get("/recomendacoes")
+    r = client.get("/api/recomendacoes")
     assert r.status_code == 200
     js = r.get_json()
     assert isinstance(js, list) and js[0].get("nome") == "Rex"

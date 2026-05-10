@@ -14,7 +14,7 @@ migrate = Migrate()
 
 
 def _normalize_database_url(url: str) -> str:
-    if not url:
+    if not url or url.lower().startswith("sqlite:"):
         return url
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg2://", 1)
@@ -132,6 +132,3 @@ def create_app():
 
     return app
 
-
-# expose for gunicorn
-app = create_app()

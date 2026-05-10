@@ -69,7 +69,7 @@ def test_get_animais_returns_list(client, monkeypatch):
     monkeypatch.setattr("app.extensions.db.get_conn", fake_conn_factory(rows=fake_rows), raising=False)
     monkeypatch.setattr("app.extensions.db.db", fake_conn_factory(rows=fake_rows), raising=False)
 
-    resp = client.get("/animais")
+    resp = client.get("/api/animais")
     assert resp.status_code == 200, f"GET /animais returned {resp.status_code} body={resp.get_data(as_text=True)}"
 
     data = resp.get_json()
@@ -92,6 +92,7 @@ def test_create_animal_requires_auth_and_creates(monkeypatch, client):
         c.lastrowid = 123
         return conn
     monkeypatch.setattr("app.extensions.db.get_conn", _get_conn, raising=False)
+    monkeypatch.setattr("app.extensions.db.db", _get_conn, raising=False)
 
     novo = {
         "nome": "Bolt-TEST",
@@ -101,25 +102,23 @@ def test_create_animal_requires_auth_and_creates(monkeypatch, client):
         "descricao": "bom",
     }
 
-    r = client.post("/animais", json=novo)
+    r = client.post("/api/animais", json=novo)
     assert r.status_code in (200, 201), f"status {r.status_code} / body: {r.get_data(as_text=True)}"
     body = r.get_json()
     assert body.get("ok") is True
     assert "id" in body and isinstance(body["id"], int)
 
 
-def test_create_animal_missing_required_fields_returns_400(client):
-    """POST /animais sem os campos obrigatórios deve retornar 400."""
+def test_create_animal_missing_required_fields_returns_400(client, monkeypatch):
+    """POST /animais sem os campos obrigatÃ³rios deve retornar 400."""
 
-    import app.api as api_mod
-    # safe patch
-    api_mod._require_auth = lambda: 3
+    monkeypatch.setattr("app.api._require_auth", lambda: 3, raising=False)
 
     novo = {
         "nome": "",  
         "especie": "Cachorro",
     }
-    r = client.post("/animais", json=novo)
+    r = client.post("/api/animais", json=novo)
     assert r.status_code == 400
     j = r.get_json()
     assert j.get("error") is not None
@@ -165,15 +164,16 @@ def test_adopt_animal_mark_and_unmark(monkeypatch, client):
 
 
     monkeypatch.setattr("app.extensions.db.get_conn", lambda: MultiFakeConn(), raising=False)
+    monkeypatch.setattr("app.extensions.db.db", lambda: MultiFakeConn(), raising=False)
 
     # mark action
-    r = client.patch("/animais/99/adopt", json={"action": "mark"})
+    r = client.patch("/api/animais/99/adopt", json={"action": "mark"})
     assert r.status_code == 200, f"mark returned {r.status_code} body={r.get_data(as_text=True)}"
     body = r.get_json()
     assert body.get("ok") is True
     assert "animal" in body and body["animal"].get("id") == 99
 
-    r2 = client.patch("/animais/99/adopt", json={"action": "undo"})
+    r2 = client.patch("/api/animais/99/adopt", json={"action": "undo"})
     assert r2.status_code == 200
     b2 = r2.get_json()
     assert b2.get("ok") is True
@@ -187,7 +187,7 @@ def test_recomendacoes_fallback_returns_recent(monkeypatch, client):
     ]
     monkeypatch.setattr("app.extensions.db.get_conn", fake_conn_factory(rows=fake_rows), raising=False)
 
-    resp = client.get("/recomendacoes?n=2")
+    resp = client.get("/api/recomendacoes?n=2")
     assert resp.status_code == 200
     data = resp.get_json()
     assert isinstance(data, dict)
@@ -206,3 +206,6 @@ def test_recomendacoes_fallback_returns_recent(monkeypatch, client):
         )
         for i in items
     ), "fallback did not return items with 'nome'/'name' or 'id'"
+
+
+

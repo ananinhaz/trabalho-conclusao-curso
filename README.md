@@ -47,5 +47,65 @@ O sistema segue uma arquitetura modularizada em três camadas, garantindo escala
   - Schema `adoptme` com as tabelas cruciais `usuarios`, `animais` e `perfil_adotante`.
 
 - **Frontend (React / Material UI)**
-  - Aplicação Single Page Application (SPA) que consome a API REST.
-  - Principais componentes incluem a página de listagem (`Animals.jsx`), o formulário de doação (`Donate.jsx`) e o formulário de perfil do adotante (`AdopterForm.jsx`).
+  - Aplicação Single Page Application (SPA) que consome a API REST.
+  - Principais componentes incluem a página de listagem (`Animals.jsx`), o formulário de doação (`Donate.jsx`) e o formulário de perfil do adotante (`AdopterForm.jsx`).
+
+---
+
+## Desenvolvimento local
+
+### Pré-requisitos
+- Python 3.10+
+- Node.js 18+
+- (Opcional) MySQL, se não usar SQLite
+
+### 1. Configurar variáveis de ambiente
+```bash
+cp .env.example .env
+# Edite .env: para dev local com SQLite use DATABASE_URL=sqlite:///./backend/dev.db
+```
+
+### 2. Rodar o backend
+```bash
+cd backend
+python -m venv venv
+# Windows:
+venv\Scripts\Activate.ps1
+# Linux/macOS:
+# source venv/bin/activate
+pip install -r requirements.txt
+# Com .env com DATABASE_URL=sqlite:///./dev.db (caminho relativo a backend/)
+# Criar tabelas SQLite (uma vez):
+python init_sqlite_schema.py
+flask run
+# ou: python -m flask run
+# Backend em http://127.0.0.1:5000
+```
+
+### 3. Rodar o frontend
+```bash
+cd frontend
+npm install
+npm run dev
+# Frontend em http://127.0.0.1:5173
+```
+
+### 4. Testes e cobertura
+
+**Backend (SQLite nos testes):**
+```bash
+cd backend
+# Certifique-se de que .env tem DATABASE_URL=sqlite:///... ou deixe o conftest definir
+. venv\Scripts\Activate.ps1   # ou source venv/bin/activate
+pytest --cov=app --cov-report=xml --cov-report=term
+# coverage.xml em backend/coverage.xml
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm run test:coverage
+# lcov.info em frontend/coverage/lcov.info
+```
+
+**Sonar:** Os relatórios `backend/coverage.xml` e `frontend/coverage/lcov.info` são usados pelo SonarCloud no CI.
