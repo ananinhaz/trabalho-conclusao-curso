@@ -1,6 +1,6 @@
 # TCC - Adopt.me
 
-Este repositório armazena o desenvolvimento completo do Trabalho de Conclusão de Curso (TCC).
+Este repositório armazena o desenvolvimento completo do Trabalho de Conclusão de Curso (TCC)
 
 ## Informações iniciais
 
