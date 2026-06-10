@@ -113,6 +113,14 @@ describe('api.js', () => {
     await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
   })
 
+  it('authApi.logout ignora falha do endpoint', async () => {
+    localStorage.setItem('access_token', 'x')
+    fetch.mockRejectedValue(new Error('offline'))
+    authApi.logout()
+    expect(localStorage.getItem('access_token')).toBeNull()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
+  })
+
   it('authApi.loginWithGoogle redireciona para OAuth', () => {
     const original = window.location
     delete window.location

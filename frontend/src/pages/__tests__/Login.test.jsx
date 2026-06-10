@@ -11,6 +11,34 @@ describe('Login (page)', () => {
     vi.restoreAllMocks() 
   })
 
+  test('exibe Entrando enquanto login está em andamento', async () => {
+    let resolveLogin
+    vi.spyOn(api.authApi, 'login').mockImplementation(
+      () => new Promise((resolve) => { resolveLogin = resolve })
+    )
+
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/auth/login']}>
+        <Routes>
+          <Route path="/auth/login" element={<Login />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await user.type(screen.getByLabelText(/e-?mail/i), 'user@exemplo.com')
+    await user.type(screen.getByLabelText(/senha/i), 'senha123')
+    await user.click(screen.getByRole('button', { name: /^Entrar$/i }))
+
+    expect(screen.getByRole('button', { name: /Entrando/i })).toBeInTheDocument()
+
+    resolveLogin({ ok: true })
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Entrar$/i })).toBeInTheDocument()
+    })
+  })
+
   test('preenche email/senha e chama authApi.login, redireciona após sucesso', async () => {
     const mockLogin = vi
       .spyOn(api.authApi, 'login')
