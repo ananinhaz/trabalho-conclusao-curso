@@ -25,6 +25,11 @@ dist/
 build/
 frontend/.cache/
 
+# Test coverage (generated in CI/local; do not commit)
+backend/coverage.xml
+backend/.coverage
+frontend/coverage/
+
 # SO
 .DS_Store
 Thumbs.db

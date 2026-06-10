@@ -157,8 +157,7 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
-          npm run test:coverage || true
-        continue-on-error: true
+          npm run test:coverage
 
       ####################
       # SonarCloud scan
@@ -171,6 +170,9 @@ jobs:
           args: >
             -Dsonar.organization=${{ secrets.SONAR_ORG }}
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECTKEY }}
-            -Dsonar.sources=frontend,backend
+            -Dsonar.sources=backend/app,frontend/src
+            -Dsonar.tests=backend/tests,frontend/src
+            -Dsonar.test.inclusions=**/*test*.py,**/*test*.jsx,**/*test*.js,**/__tests__/**,**/tests/**/*
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/*.min.js,**/__pycache__/**,backend/venv/**,**/coverage/**,**/lcov-report/**,**/.coverage
             -Dsonar.python.coverage.reportPaths=backend/coverage.xml
             -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
