@@ -38,9 +38,7 @@ def is_postgres() -> bool:
     except Exception:
         return False
 
-<<<<<<< HEAD
 # --- JWT helpers 
-=======
 
 def is_sqlite() -> bool:
     """True quando o DB é SQLite (testes/dev local). SQLite usa ON CONFLICT como Postgres."""
@@ -53,7 +51,6 @@ def is_sqlite() -> bool:
     return False
 
 # --- JWT helpers -----------------------------------------------------------
->>>>>>> 5e64d5a (fix: ajuste nos testes)
 JWT_SECRET = os.environ.get("JWT_SECRET")
 JWT_ALGS = ["HS256"]
 
