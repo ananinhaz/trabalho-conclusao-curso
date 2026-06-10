@@ -91,11 +91,7 @@ export const authApi = {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     // if your backend still wants a logout endpoint you can call it:
-    try {
-      apiPost('/auth/logout', {}); // fire-and-forget
-    } catch (e) {
-      // ignore
-    }
+    void apiPost('/auth/logout', {}).catch(() => {});
   },
 
   loginWithGoogle(nextPath) {
