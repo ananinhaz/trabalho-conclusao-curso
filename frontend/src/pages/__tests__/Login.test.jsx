@@ -81,6 +81,28 @@ describe('Login (page)', () => {
     expect(await screen.findByText('Preencha email e senha.')).toBeInTheDocument()
   })
 
+  test('rejeição não-Error mostra mensagem de rede genérica', async () => {
+    vi.spyOn(api.authApi, 'login').mockRejectedValue('falha desconhecida')
+
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/auth/login']}>
+        <Routes>
+          <Route path="/auth/login" element={<Login />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await user.type(screen.getByLabelText(/e-?mail/i), 'user@exemplo.com')
+    await user.type(screen.getByLabelText(/senha/i), 'senha123')
+    await user.click(screen.getByRole('button', { name: /^Entrar$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Erro de rede ao tentar logar.')).toBeInTheDocument()
+    })
+  })
+
   test('erro de rede mostra mensagem genérica', async () => {
     vi.spyOn(api.authApi, 'login').mockRejectedValue(new Error('Network timeout'))
 

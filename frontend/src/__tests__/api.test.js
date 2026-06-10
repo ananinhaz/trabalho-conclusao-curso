@@ -78,6 +78,13 @@ describe('api.js', () => {
     await expect(apiGet('/broken')).rejects.toThrow('Erro 500')
   })
 
+  it('authApi.me chama GET /auth/me', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { user: { id: 1 } } }))
+    const data = await authApi.me()
+    expect(data.user.id).toBe(1)
+    expect(fetch.mock.calls[0][0]).toContain('/auth/me')
+  })
+
   it('authApi.login persiste token e usuário', async () => {
     fetch.mockResolvedValue(
       mockResponse({
