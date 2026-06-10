@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Login from '../Login'
 import * as api from '../../api' 
@@ -65,6 +65,59 @@ describe('Login (page)', () => {
       expect(screen.getByText('Email ou senha inválidos.')).toBeInTheDocument()
     })
     
+  })
+
+  test('campos vazios mostram erro de validação', async () => {
+    render(
+      <MemoryRouter initialEntries={['/auth/login']}>
+        <Routes>
+          <Route path="/auth/login" element={<Login />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    fireEvent.submit(screen.getByRole('button', { name: /^Entrar$/i }).closest('form'))
+
+    expect(await screen.findByText('Preencha email e senha.')).toBeInTheDocument()
+  })
+
+  test('erro de rede mostra mensagem genérica', async () => {
+    vi.spyOn(api.authApi, 'login').mockRejectedValue(new Error('Network timeout'))
+
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/auth/login']}>
+        <Routes>
+          <Route path="/auth/login" element={<Login />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await user.type(screen.getByLabelText(/e-?mail/i), 'user@exemplo.com')
+    await user.type(screen.getByLabelText(/senha/i), 'senha123')
+    await user.click(screen.getByRole('button', { name: /^Entrar$/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Erro de rede ao tentar logar.')).toBeInTheDocument()
+    })
+  })
+
+  test('clicar em Criar conta navega para registro', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/auth/login']}>
+        <Routes>
+          <Route path="/auth/login" element={<Login />} />
+          <Route path="/auth/register" element={<div>Página de registro</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await user.click(screen.getByRole('button', { name: /Criar conta/i }))
+
+    expect(await screen.findByText('Página de registro')).toBeInTheDocument()
   })
 
   test('clica em "Entrar com Google" e chama loginWithGoogle com next', async () => {

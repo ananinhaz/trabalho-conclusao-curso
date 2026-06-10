@@ -29,6 +29,7 @@ describe('api.js', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
@@ -67,6 +68,16 @@ describe('api.js', () => {
     await expect(apiGet('/broken')).rejects.toThrow('server down')
   })
 
+  it('apiFetch usa mensagem genérica quando json e text falham', async () => {
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: vi.fn().mockRejectedValue(new Error('bad json')),
+      text: vi.fn().mockRejectedValue(new Error('bad text')),
+    })
+    await expect(apiGet('/broken')).rejects.toThrow('Erro 500')
+  })
+
   it('authApi.login persiste token e usuário', async () => {
     fetch.mockResolvedValue(
       mockResponse({
@@ -101,6 +112,20 @@ describe('api.js', () => {
     window.location = { href: '' }
     authApi.loginWithGoogle('/perfil')
     expect(window.location.href).toBe('/api/auth/google?next=%2Fperfil')
+    window.location = original
+  })
+
+  it('loginWithGoogle acrescenta /api quando VITE_API_URL é base customizada', async () => {
+    vi.stubEnv('VITE_API_URL', 'http://localhost:8080')
+    vi.resetModules()
+    const { authApi: customAuth } = await import('../api')
+    const original = window.location
+    delete window.location
+    window.location = { href: '' }
+    customAuth.loginWithGoogle('/perfil')
+    expect(window.location.href).toBe(
+      'http://localhost:8080/api/auth/google?next=%2Fperfil'
+    )
     window.location = original
   })
 
