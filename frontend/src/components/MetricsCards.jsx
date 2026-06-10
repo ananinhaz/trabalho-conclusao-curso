@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import PropTypes from "prop-types";
 import { Box, Grid, Paper, Typography, CircularProgress, LinearProgress } from "@mui/material";
 import { animaisApi } from "../api";
 
@@ -23,6 +24,12 @@ function StatCard({ title, value, hint }) {
     </Paper>
   );
 }
+
+StatCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  hint: PropTypes.string,
+};
 
 export default function MetricsCards() {
   const [loading, setLoading] = useState(true);

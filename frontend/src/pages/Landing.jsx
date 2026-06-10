@@ -499,7 +499,9 @@ export default function Landing() {
             margin: "0 auto",
           }}
         >
-          🐾 O <strong>AdoptMe</strong> é um sistema web que conecta pessoas interessadas
+          {'🐾 O '}
+          <strong>AdoptMe</strong>
+          {' é um sistema web que conecta pessoas interessadas'}
           em adoção responsável com animais disponíveis para um novo lar.
         </Typography>
 
@@ -513,9 +515,9 @@ export default function Landing() {
             margin: "18px auto 0",
           }}
         >
-          🤝 Em vez de usar um K fixo de forma literal, o AdoptMe transforma o perfil do
-          adotante e os atributos dos animais em vetores numéricos e usa uma medida
-          de <strong>similaridade vetorial ponderada</strong> (implementada com utilitários do
+          {'🤝 Em vez de usar um K fixo de forma literal, o AdoptMe transforma o perfil do adotante e os atributos dos animais em vetores numéricos e usa uma medida de '}
+          <strong>similaridade vetorial ponderada</strong>
+          {' (implementada com utilitários do'}
           Scikit-Learn) para rankear os pets mais compatíveis. Essa abordagem permite
           priorizar características importantes e gerar recomendações personalizadas.
         </Typography>
@@ -530,8 +532,9 @@ export default function Landing() {
             margin: "18px auto 0",
           }}
         >
-          💜 É um projeto com foco social e acadêmico, desenvolvido com
-          <strong> React, Flask e MySQL</strong>, com autenticação via Google,
+          {'💜 É um projeto com foco social e acadêmico, desenvolvido com '}
+          <strong>React, Flask e MySQL</strong>
+          {', com autenticação via Google,'}
           trazendo modernidade e responsabilidade ao processo de adoção.
         </Typography>
       </Box>

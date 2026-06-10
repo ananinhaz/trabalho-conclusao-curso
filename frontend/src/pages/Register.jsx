@@ -44,7 +44,7 @@ export default function Register() {
       <h2>Cadastrar</h2>
       <form onSubmit={handleSubmit}>
         <label>
-          Nome
+          <span>Nome</span>
           <input
             type="text"
             value={nome}
@@ -55,7 +55,7 @@ export default function Register() {
         </label>
 
         <label>
-          E-mail
+          <span>E-mail</span>
           <input
             type="email"
             value={email}
@@ -66,7 +66,7 @@ export default function Register() {
         </label>
 
         <label>
-          Senha
+          <span>Senha</span>
           <input
             type="password"
             value={senha}

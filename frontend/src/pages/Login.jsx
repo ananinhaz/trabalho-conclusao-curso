@@ -65,7 +65,7 @@ export default function Login() {
 
       <form onSubmit={handleSubmit} style={styles.form}>
         <label style={styles.label}>
-          E-mail
+          <span>E-mail</span>
           <input
             type="email"
             placeholder="seu@exemplo.com"
@@ -77,7 +77,7 @@ export default function Login() {
           />
         </label>
         <label style={styles.label}>
-          Senha
+          <span>Senha</span>
           <input
             type="password"
             placeholder="••••••••"
@@ -110,10 +110,12 @@ export default function Login() {
           Entrar com Google
         </button>
         <div style={{ marginTop: 12 }}>
-          <span>Não tem conta? </span>
-          <button onClick={goToRegister} style={styles.linkButton} disabled={loading}>
-            Criar conta
-          </button>
+          <span>
+            Não tem conta?{' '}
+            <button onClick={goToRegister} style={styles.linkButton} disabled={loading}>
+              Criar conta
+            </button>
+          </span>
         </div>
       </div>
 

@@ -60,7 +60,11 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "DEV_JWT_SECRET_CHANGE_ME")
     jwt = JWTManager(app)
 
-    # CORS: JWT flow DOES NOT require cookies -> disable credentials
+    # Security (CSRF): API REST autentica via JWT no header Authorization, sem cookies
+    # de sessão nas rotas /api/*. CSRF protege autenticação baseada em cookie; não se
+    # aplica a Bearer tokens (OWASP REST / ASVS). OAuth Google usa parâmetro state do
+    # Authlib contra CSRF no callback. supports_credentials=False impede envio cross-origin
+    # de cookies nas rotas /api/*.
     allowed_origins = [
         "http://127.0.0.1:8080",
         "http://localhost:8080",

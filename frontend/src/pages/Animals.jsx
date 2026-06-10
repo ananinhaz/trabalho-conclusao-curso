@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import PropTypes from 'prop-types'
 import { useNavigate } from 'react-router-dom'
 import { animaisApi, recApi, authApi } from '../api'
 import {
@@ -30,6 +31,8 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import VolunteerActivismRoundedIcon from '@mui/icons-material/VolunteerActivismRounded'; // Ícone escolhido
+
+const localeSort = (a, b) => a.localeCompare(b, 'pt', { sensitivity: 'base' })
 
 export default function Animals({ user: userProp }) {
   const navigate = useNavigate()
@@ -152,9 +155,9 @@ export default function Animals({ user: userProp }) {
       if (a?.cidade) cidades.add(String(a.cidade))
     })
     return {
-      especies: ['Todas', ...Array.from(especies).sort()],
-      portes: ['Todas', ...Array.from(portes).sort()],
-      cidades: Array.from(cidades).sort(),
+      especies: ['Todas', ...Array.from(especies).sort(localeSort)],
+      portes: ['Todas', ...Array.from(portes).sort(localeSort)],
+      cidades: Array.from(cidades).sort(localeSort),
     }
   }, [all])
 
@@ -232,7 +235,8 @@ export default function Animals({ user: userProp }) {
   const userInitials = user?.nome ? user.nome.split(' ').map((n) => n[0]).join('').toUpperCase().substring(0, 2) : 'U'
   const handleProfileClick = () => (window.location.href = '/perfil')
   
-  const AttributeChip = ({ label, icon }) => (
+  function AttributeChip({ label, icon }) {
+    return (
     <Chip
       label={label}
       size="small"
@@ -252,7 +256,13 @@ export default function Animals({ user: userProp }) {
         },
       }}
     />
-  )
+    )
+  }
+
+  AttributeChip.propTypes = {
+    label: PropTypes.string.isRequired,
+    icon: PropTypes.element.isRequired,
+  }
 
   function clearFilters() {
     setFilterEspecie('Todas')
@@ -526,4 +536,18 @@ export default function Animals({ user: userProp }) {
       </Container>
     </Box>
   )
+}
+
+Animals.propTypes = {
+  user: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    nome: PropTypes.string,
+    avatar_url: PropTypes.string,
+    photo_url: PropTypes.string,
+    avatar: PropTypes.string,
+    picture: PropTypes.string,
+    photo: PropTypes.string,
+    profile_image: PropTypes.string,
+    doador_id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  }),
 }
