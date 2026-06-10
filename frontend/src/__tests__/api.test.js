@@ -52,6 +52,29 @@ describe('api.js', () => {
     expect(opts.headers.Authorization).toBe('Bearer tok123')
   })
 
+  it('apiGet não envia Authorization quando não há token', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: {} }))
+    await apiGet('/health')
+    const [, opts] = fetch.mock.calls[0]
+    expect(opts.headers.Authorization).toBeUndefined()
+  })
+
+  it('apiGet normaliza URL quando VITE_API_URL termina com barra', async () => {
+    vi.stubEnv('VITE_API_URL', '/api/')
+    vi.resetModules()
+    const { apiGet: get } = await import('../api')
+    fetch.mockResolvedValue(mockResponse({ json: { ok: true } }))
+    await get('/health')
+    expect(fetch.mock.calls[0][0]).toBe('/api/health')
+  })
+
+  it('apiDel não envia body na requisição', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { ok: true } }))
+    await apiDel('/recurso')
+    const [, opts] = fetch.mock.calls[0]
+    expect(opts.body).toBeUndefined()
+  })
+
   it('apiPost lança erro com mensagem da API', async () => {
     fetch.mockResolvedValue(
       mockResponse({ ok: false, status: 401, json: { error: 'Credenciais inválidas' } })
@@ -66,6 +89,20 @@ describe('api.js', () => {
       mockResponse({ ok: false, status: 500, json: undefined, text: 'server down' })
     )
     await expect(apiGet('/broken')).rejects.toThrow('server down')
+  })
+
+  it('apiFetch usa campo message quando error ausente', async () => {
+    fetch.mockResolvedValue(
+      mockResponse({ ok: false, status: 400, json: { message: 'Pedido inválido' } })
+    )
+    await expect(apiGet('/broken')).rejects.toThrow('Pedido inválido')
+  })
+
+  it('apiFetch usa Erro status quando json falha e text é vazio', async () => {
+    fetch.mockResolvedValue(
+      mockResponse({ ok: false, status: 422, json: undefined, text: '' })
+    )
+    await expect(apiGet('/broken')).rejects.toThrow('Erro 422')
   })
 
   it('apiFetch usa mensagem genérica quando json e text falham', async () => {
@@ -97,10 +134,38 @@ describe('api.js', () => {
     expect(JSON.parse(localStorage.getItem('user'))).toEqual({ id: 1, nome: 'Ana' })
   })
 
+  it('authApi.login não persiste storage quando access_token ausente', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { ok: true } }))
+    await authApi.login('a@b.com', 'secret')
+    expect(localStorage.getItem('access_token')).toBeNull()
+    expect(localStorage.getItem('user')).toBeNull()
+  })
+
+  it('authApi.login persiste token sem usuário quando user ausente', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { access_token: 'jwt-only' } }))
+    await authApi.login('a@b.com', 'secret')
+    expect(localStorage.getItem('access_token')).toBe('jwt-only')
+    expect(localStorage.getItem('user')).toBeNull()
+  })
+
   it('authApi.register persiste token', async () => {
     fetch.mockResolvedValue(mockResponse({ json: { access_token: 'reg-jwt' } }))
     await authApi.register('Ana', 'a@b.com', 'secret')
     expect(localStorage.getItem('access_token')).toBe('reg-jwt')
+  })
+
+  it('authApi.register persiste usuário quando retornado', async () => {
+    fetch.mockResolvedValue(
+      mockResponse({ json: { access_token: 'reg-jwt', user: { id: 2, nome: 'Bob' } } })
+    )
+    await authApi.register('Bob', 'b@b.com', 'secret')
+    expect(JSON.parse(localStorage.getItem('user'))).toEqual({ id: 2, nome: 'Bob' })
+  })
+
+  it('authApi.register não persiste storage quando access_token ausente', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { ok: true } }))
+    await authApi.register('Ana', 'a@b.com', 'secret')
+    expect(localStorage.getItem('access_token')).toBeNull()
   })
 
   it('authApi.logout limpa storage e chama endpoint', async () => {
@@ -130,6 +195,41 @@ describe('api.js', () => {
     window.location = original
   })
 
+  it('loginWithGoogle sem next omite query string', () => {
+    const original = window.location
+    delete window.location
+    window.location = { href: '' }
+    authApi.loginWithGoogle()
+    expect(window.location.href).toBe('/api/auth/google')
+    window.location = original
+  })
+
+  it('loginWithGoogle não duplica /api quando VITE_API_URL já é /api', async () => {
+    vi.stubEnv('VITE_API_URL', '/api')
+    vi.resetModules()
+    const { authApi: customAuth } = await import('../api')
+    const original = window.location
+    delete window.location
+    window.location = { href: '' }
+    customAuth.loginWithGoogle('/dest')
+    expect(window.location.href).toBe('/api/auth/google?next=%2Fdest')
+    window.location = original
+  })
+
+  it('loginWithGoogle normaliza VITE_API_URL que termina com /api/', async () => {
+    vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api/')
+    vi.resetModules()
+    const { authApi: customAuth } = await import('../api')
+    const original = window.location
+    delete window.location
+    window.location = { href: '' }
+    customAuth.loginWithGoogle('/go')
+    expect(window.location.href).toBe(
+      'http://localhost:8080/api/auth/google?next=%2Fgo'
+    )
+    window.location = original
+  })
+
   it('loginWithGoogle acrescenta /api quando VITE_API_URL é base customizada', async () => {
     vi.stubEnv('VITE_API_URL', 'http://localhost:8080')
     vi.resetModules()
@@ -142,6 +242,38 @@ describe('api.js', () => {
       'http://localhost:8080/api/auth/google?next=%2Fperfil'
     )
     window.location = original
+  })
+
+  it('animaisApi.list sem parâmetros não adiciona query string', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: [] }))
+    await animaisApi.list()
+    expect(fetch.mock.calls[0][0]).toBe('/api/animais')
+  })
+
+  it('animaisApi.list ignora parâmetros vazios ou undefined', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: [] }))
+    await animaisApi.list({ especie: '', porte: undefined })
+    expect(fetch.mock.calls[0][0]).toBe('/api/animais')
+  })
+
+  it('recApi.list usa n padrão 12', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: [] }))
+    await recApi.list()
+    expect(fetch.mock.calls[0][0]).toContain('/recomendacoes?n=12')
+  })
+
+  it('animaisApi.adopt usa action padrão mark', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: { ok: true } }))
+    await animaisApi.adopt(5)
+    const [, opts] = fetch.mock.calls[0]
+    expect(JSON.parse(opts.body)).toEqual({ action: 'mark' })
+    expect(opts.method).toBe('PATCH')
+  })
+
+  it('animaisApi.adoptionMetrics usa days padrão 7', async () => {
+    fetch.mockResolvedValue(mockResponse({ json: [] }))
+    await animaisApi.adoptionMetrics()
+    expect(fetch.mock.calls[0][0]).toContain('days=7')
   })
 
   it('animaisApi cobre CRUD e métricas', async () => {
