@@ -11,7 +11,6 @@ import {
   Paper,
   Typography,
   Button,
-  Grid,
   Stack,
   IconButton,
   CircularProgress,
@@ -19,6 +18,13 @@ import {
 import PetsIcon from "@mui/icons-material/Pets";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import ArrowForwardIosIcon from "@mui/icons-material/ArrowForwardIos";
+import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
+import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
+import FavoriteOutlinedIcon from "@mui/icons-material/FavoriteOutlined";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
+import { colors, gradientPrimary, shadows, radii, cardSx, btnGradient, btnOutline } from "../theme";
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -94,26 +100,50 @@ export default function Landing() {
     setIdx((prev) => (prev + 1) % animais.length);
   };
 
-  const primaryColor = "#6366F1";
+  const primaryColor = colors.primary;
   const primaryColorHover = "#4F46E5";
 
-  const cardStyles = {
-    borderRadius: "1.25rem",
-    bgcolor: "#fff",
-    border: "1px solid rgba(15,23,42,0.03)",
-    boxShadow: "0 20px 50px rgba(15,23,42,0.03)",
-  };
+  const infoCards = [
+    {
+      icon: <ShieldOutlinedIcon sx={{ fontSize: 28 }} />,
+      bg: "#EEF2FF",
+      color: colors.primary,
+      title: "Adoção consciente",
+      text: "Garantir que o animal será acolhido em um ambiente adequado ao seu porte, energia e rotina da família.",
+    },
+    {
+      icon: <CheckCircleOutlineIcon sx={{ fontSize: 28 }} />,
+      bg: "#ECFDF5",
+      color: colors.success,
+      title: "Registro detalhado",
+      text: "Quando o processo não considera compatibilidade, aumentam as chances de devolução e frustração.",
+    },
+    {
+      icon: <HomeOutlinedIcon sx={{ fontSize: 28 }} />,
+      bg: "#FEF3C7",
+      color: colors.gold,
+      title: "Família na escolha",
+      text: "Cada perfil de adotante é considerado para encontrar o pet que melhor se encaixa no lar.",
+    },
+    {
+      icon: <FavoriteOutlinedIcon sx={{ fontSize: 28 }} />,
+      bg: "#F3E8FF",
+      color: colors.secondary,
+      title: "Amor que transforma",
+      text: "Por isso o AdoptMe orienta e recomenda animais com base no seu perfil de adotante.",
+    },
+  ];
 
   return (
-    <Box sx={{ bgcolor: "#F9FAFB", minHeight: "100vh" }}>
+    <Box sx={{ bgcolor: colors.background, minHeight: "100vh" }}>
       <Paper
         elevation={0}
         component="header"
         sx={{
-          bgcolor: "#fff",
-          borderBottom: "1px solid rgba(15,23,42,0.05)",
-          py: 1,
-          px: { xs: 2, md: 4 },
+          bgcolor: colors.card,
+          boxShadow: shadows.header,
+          py: 1.5,
+          px: { xs: 2, md: 6 },
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -122,290 +152,122 @@ export default function Landing() {
           zIndex: 10,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-          <PetsIcon sx={{ color: primaryColor }} />
-          <Typography
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box
             sx={{
-              fontSize: "1.3rem",
-              fontWeight: 700,
-              color: primaryColor,
+              width: 36,
+              height: 36,
+              borderRadius: "10px",
+              background: gradientPrimary,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
+            <PetsIcon sx={{ color: "#fff", fontSize: 20 }} />
+          </Box>
+          <Typography sx={{ fontSize: "1.35rem", fontWeight: 800, color: colors.text }}>
             AdoptMe
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} component="nav">
+        <Stack direction="row" spacing={1.5} component="nav">
           <Button
             variant="outlined"
-            size="small"
+            size="medium"
+            startIcon={<FavoriteBorderIcon />}
             onClick={() => navigate("/login?next=/perfil-adotante")}
-            sx={{
-              borderRadius: "9999px",
-              textTransform: "none",
-              fontWeight: 600,
-              borderColor: primaryColor,
-              color: primaryColor,
-              "&:hover": {
-                borderColor: primaryColorHover,
-                bgcolor: "#F4F4FE"
-              }
-            }}
+            sx={{ ...btnOutline, px: 2.5, py: 1 }}
           >
             Quero adotar
           </Button>
           <Button
             variant="contained"
-            size="small"
+            size="medium"
+            startIcon={<PetsIcon />}
             onClick={() => navigate("/login?next=/doar")}
-            sx={{
-              borderRadius: "9999px",
-              textTransform: "none",
-              fontWeight: 600,
-              bgcolor: primaryColor,
-              "&:hover": { bgcolor: primaryColorHover },
-              boxShadow: "none"
-            }}
+            sx={{ ...btnGradient, px: 2.5, py: 1, height: 'auto' }}
           >
             Quero doar
           </Button>
         </Stack>
       </Paper>
 
-      {/*  carrossel com conteudo dos animais */}
-      <Container maxWidth="lg" sx={{ mt: { xs: 4, md: 6 }, mb: { xs: 4, md: 6 } }}>
-        <Paper
-          elevation={0}
+      {/* Hero principal */}
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 1400,
+          mx: "auto",
+          px: { xs: 2, md: 4 },
+          mt: { xs: 5, md: 8 },
+          mb: { xs: 5, md: 7 },
+        }}
+      >
+        <Box
           sx={{
-            ...cardStyles,
-            overflow: "hidden",
-            position: "relative",
-            p: 0,
-            minHeight: { xs: '300px', md: '280px' }, 
-            bgcolor: '#FFF', 
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1.3fr" },
+            gap: { xs: 4, md: 6 },
+            alignItems: "center",
+            width: "100%",
           }}
         >
-          {/*mostrar o loading ou o carrossel */}
-          {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', minHeight: { xs: '300px', md: '280px' } }}>
-              <CircularProgress sx={{ color: primaryColor }} />
+          <Box sx={{ width: "100%", minWidth: 0 }}>
+            <Box
+              sx={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 0.75,
+                bgcolor: "#EEF2FF",
+                color: colors.primary,
+                px: 2,
+                py: 0.75,
+                borderRadius: radii.pill,
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                mb: 2.5,
+              }}
+            >
+              <FavoriteBorderIcon sx={{ fontSize: 16 }} />
+              Adoção responsável transforma vidas
             </Box>
-          ) : (
-            <>
-              {/* Loop pelos animais */}
-              {animais.map((pet, i) => (
-                <Box
-                  key={pet.id}
-                  sx={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    display: "flex", 
-                    alignItems: "stretch", 
-                    opacity: i === idx ? 1 : 0, 
-                    transition: "opacity 0.8s ease-in-out",
-                    bgcolor: '#fff', 
-                  }}
-                >
-                  {/* Imagem animais */}
-                  <Box
-                    sx={{
-                      flex: { xs: 1, md: 0.4 }, 
-                      height: "100%",
-                      bgcolor: '#eee', 
-                      display: { xs: 'none', md: 'block' }, 
-                      "& img": {
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        objectPosition: "center",
-                      },
-                    }}
-                  >
-                    <img 
-                      src={pet.photo_url || pet.foto} 
-                      alt={pet.nome} 
-                    />
-                  </Box>
-
-                  <Box sx={{
-                    flex: { xs: 1, md: 0.6 }, 
-                    p: { xs: 3, md: 4 },
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center', 
-                    textAlign: { xs: 'center', md: 'left' },
-                  }}>
-                    <Typography
-                      variant="h6"
-                      component="span"
-                      sx={{
-                        fontWeight: 600,
-                        color: primaryColor,
-                        fontSize: '1rem',
-                        mb: 0.5,
-                      }}
-                    >
-                      {pet.especie} em destaque
-                    </Typography>
-                    <Typography
-                      variant="h4"
-                      component="h2"
-                      sx={{
-                        fontWeight: 700,
-                        mb: 1.5,
-                        color: '#1f2937',
-                        fontSize: { xs: '2rem', md: '2.5rem' },
-                        lineHeight: 1.1,
-                      }}
-                    >
-                      {pet.nome}
-                    </Typography>
-                    <Typography
-                      variant="body1"
-                      sx={{
-                        mb: 3,
-                        color: '#475569',
-                        fontSize: { xs: '0.95rem', md: '1.05rem' },
-                      }}
-                    >
-                      {pet.descricao}
-                    </Typography>
-                    
-                    <Typography
-                        variant="h6"
-                        sx={{
-                          fontWeight: 500,
-                          color: primaryColorHover,
-                          fontStyle: 'italic',
-                          mt: 1,
-                          fontSize: { xs: '1rem', md: '1.1rem' },
-                        }}
-                    >
-                      "O próximo capítulo de uma vida começa com você."
-                    </Typography>
-                    
-                  </Box>
-                </Box>
-              ))}
-
-              {/* Setas de Navegação */}
-              {animais.length > 1 && (
-                <>
-                  <IconButton
-                    onClick={handlePrevPet}
-                    sx={{
-                      position: "absolute",
-                      top: "50%",
-                      left: { xs: 10, md: 20 },
-                      transform: "translateY(-50%)",
-                      bgcolor: "rgba(255,255,255,0.7)",
-                      "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
-                      zIndex: 2,
-                    }}
-                  >
-                    <ArrowBackIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
-                  </IconButton>
-                  <IconButton
-                    onClick={handleNextPet}
-                    sx={{
-                      position: "absolute",
-                      top: "50%",
-                      right: { xs: 10, md: 20 },
-                      transform: "translateY(-50%)",
-                      bgcolor: "rgba(255,255,255,0.7)",
-                      "&:hover": { bgcolor: "rgba(255,255,255,0.9)" },
-                      zIndex: 2,
-                    }}
-                  >
-                    <ArrowForwardIosIcon sx={{ fontSize: { xs: '1rem', md: '1.2rem' }, color: "#333" }} />
-                  </IconButton>
-                </>
-              )}
-
-              {/* Bolinhas de navegação */}
-              {animais.length > 1 && (
-                <Stack
-                  direction="row"
-                  spacing={0.75}
-                  sx={{
-                    position: "absolute",
-                    bottom: "1rem",
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    zIndex: 2,
-                  }}
-                >
-                  {animais.map((pet, i) => (
-                    <Box
-                      key={pet.id}
-                      component="button"
-                      onClick={() => setIdx(i)}
-                      sx={{
-                        width: "10px",
-                        height: "10px",
-                        borderRadius: "50%",
-                        border: "none",
-                        p: 0,
-                        bgcolor: i === idx ? primaryColor : "rgba(0,0,0,0.2)", 
-                        cursor: "pointer",
-                        transition: "background-color 0.3s ease",
-                        "&:hover": {
-                          bgcolor: i === idx ? primaryColorHover : "rgba(0,0,0,0.4)",
-                        },
-                      }}
-                    />
-                  ))}
-                </Stack>
-              )}
-            </>
-          )}
-        </Paper>
-      </Container>
-
-      {/* Hero principal  */}
-      <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
-        <Grid container spacing={5} alignItems="center">
-          <Grid item xs={12}>
             <Typography
               variant="h3"
               component="h1"
               sx={{
-                fontWeight: 700,
-                color: "#0f172a",
-                mb: 2,
-                lineHeight: 1.2,
-                fontSize: { xs: '2rem', md: '2.8rem' },
-                textAlign: 'center'
+                fontWeight: 800,
+                color: colors.text,
+                mb: 2.5,
+                lineHeight: 1.15,
+                fontSize: { xs: "2.1rem", md: "2.75rem" },
               }}
             >
-              Conectando pessoas e animais com responsabilidade.
+              Encontre o melhor amigo ou ajude um animal a{" "}
+              <Box
+                component="span"
+                sx={{
+                  background: gradientPrimary,
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}
+              >
+                encontrar um lar
+              </Box>
             </Typography>
             <Typography
               variant="body1"
-              sx={{ color: "#475569", mb: 3, fontSize: "1.05rem", textAlign: 'center', maxWidth: 800, mx: 'auto' }}
+              sx={{ color: colors.textMuted, mb: 3.5, fontSize: "1.05rem", lineHeight: 1.7, maxWidth: 520 }}
             >
-              Encontre o pet ideal ou cadastre um animal para adoção. Nosso
-              sistema usa critérios objetivos para recomendar o melhor match,
-              reduzindo devoluções e adoções mal-sucedidas.
+              Encontre o pet ideal ou cadastre um animal para adoção. Nosso sistema usa critérios
+              objetivos para recomendar o melhor match, reduzindo devoluções e adoções mal-sucedidas.
             </Typography>
-            <Stack direction="row" spacing={1.5} justifyContent="center">
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ mb: 3 }}>
               <Button
                 variant="contained"
                 size="large"
                 onClick={() => navigate("/login?next=/perfil-adotante")}
-                sx={{
-                  borderRadius: "9999px",
-                  textTransform: "none",
-                  fontWeight: 600,
-                  bgcolor: primaryColor,
-                  "&:hover": { bgcolor: primaryColorHover },
-                  py: 1.2,
-                  px: 3,
-                  boxShadow: "none"
-                }}
+                sx={{ ...btnGradient, py: 1.5, px: 4, fontSize: "1rem", height: 52 }}
               >
                 Quero adotar
               </Button>
@@ -413,26 +275,149 @@ export default function Landing() {
                 variant="outlined"
                 size="large"
                 onClick={() => navigate("/login?next=/doar")}
-                sx={{
-                  borderRadius: "9999px",
-                  textTransform: "none",
-                  fontWeight: 600,
-                  borderColor: primaryColor,
-                  color: primaryColor,
-                  "&:hover": {
-                    borderColor: primaryColorHover,
-                    bgcolor: "#F4F4FE"
-                  },
-                  py: 1.2,
-                  px: 3,
-                }}
+                sx={{ ...btnOutline, py: 1.5, px: 4, fontSize: "1rem", height: 52 }}
               >
                 Quero doar
               </Button>
             </Stack>
-          </Grid>
-        </Grid>
-      </Container>
+            <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
+              {[
+                { icon: <ShieldOutlinedIcon sx={{ fontSize: 18, color: colors.primary }} />, label: "Processo seguro" },
+                { icon: <GroupsOutlinedIcon sx={{ fontSize: 18, color: colors.success }} />, label: "Comunidade confiável" },
+                { icon: <FavoriteOutlinedIcon sx={{ fontSize: 18, color: colors.secondary }} />, label: "Impacto positivo" },
+              ].map((item) => (
+                <Stack key={item.label} direction="row" alignItems="center" spacing={0.75}>
+                  {item.icon}
+                  <Typography sx={{ fontSize: "0.85rem", color: colors.textMuted, fontWeight: 500 }}>
+                    {item.label}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+
+          <Box sx={{ width: "100%", minWidth: 0 }}>
+            <Box
+              sx={{
+                position: "relative",
+                width: "100%",
+                borderRadius: radii.card,
+                overflow: "hidden",
+                boxShadow: shadows.card,
+                minHeight: { xs: 280, md: 500 },
+              }}
+            >
+              {isLoading ? (
+                <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: { xs: 280, md: 500 } }}>
+                  <CircularProgress sx={{ color: primaryColor }} />
+                </Box>
+              ) : (
+                animais.map((pet, i) => (
+                  <Box
+                    key={pet.id}
+                    sx={{
+                      position: i === idx ? "relative" : "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      opacity: i === idx ? 1 : 0,
+                      transition: "opacity 0.8s ease-in-out",
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={pet.photo_url || pet.foto}
+                      alt={pet.nome}
+                      sx={{
+                        width: "100%",
+                        height: { xs: 280, md: 500 },
+                        minHeight: { xs: 280, md: 500 },
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        bgcolor: "rgba(255,255,255,0.95)",
+                        backdropFilter: "blur(8px)",
+                        borderRadius: "16px",
+                        p: 2,
+                        boxShadow: shadows.soft,
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: 700, color: colors.text, fontSize: "1.1rem" }}>
+                        {pet.nome}
+                      </Typography>
+                      <Typography sx={{ color: colors.textMuted, fontSize: "0.85rem", mt: 0.25 }}>
+                        {pet.especie} em destaque
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))
+              )}
+              {animais.length > 1 && !isLoading && (
+                <>
+                  <IconButton
+                    onClick={handlePrevPet}
+                    sx={{
+                      position: "absolute",
+                      top: "50%",
+                      left: 12,
+                      transform: "translateY(-50%)",
+                      bgcolor: "rgba(255,255,255,0.9)",
+                      boxShadow: shadows.soft,
+                      "&:hover": { bgcolor: "#fff" },
+                    }}
+                  >
+                    <ArrowBackIosIcon sx={{ fontSize: "1rem", color: colors.text, ml: 0.5 }} />
+                  </IconButton>
+                  <IconButton
+                    onClick={handleNextPet}
+                    sx={{
+                      position: "absolute",
+                      top: "50%",
+                      right: 12,
+                      transform: "translateY(-50%)",
+                      bgcolor: "rgba(255,255,255,0.9)",
+                      boxShadow: shadows.soft,
+                      "&:hover": { bgcolor: "#fff" },
+                    }}
+                  >
+                    <ArrowForwardIosIcon sx={{ fontSize: "1rem", color: colors.text }} />
+                  </IconButton>
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    sx={{ position: "absolute", bottom: 90, left: "50%", transform: "translateX(-50%)" }}
+                  >
+                    {animais.map((pet, i) => (
+                      <Box
+                        key={pet.id}
+                        component="button"
+                        onClick={() => setIdx(i)}
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          border: "none",
+                          p: 0,
+                          bgcolor: i === idx ? colors.primary : "rgba(255,255,255,0.6)",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                        }}
+                      />
+                    ))}
+                  </Stack>
+                </>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
       <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
         <AdoptionChart />
@@ -441,103 +426,113 @@ export default function Landing() {
         <MetricsCards />
       </Container>
 
-      {/* Adoção responsavel*/}
-      <Container maxWidth="lg" sx={{ mb: { xs: 4, md: 6 } }}>
-        <Paper
-          elevation={0}
-          sx={{ ...cardStyles, p: { xs: 2.5, md: 4 }, textAlign: 'center' }}
+      {/* Adoção responsável — cards informativos */}
+      <Container maxWidth="lg" sx={{ mb: { xs: 5, md: 7 } }}>
+        <Box sx={{ textAlign: "center", mb: 4 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: colors.text, mb: 1 }}>
+            Por que adotar com responsabilidade?
+          </Typography>
+          <Box sx={{ width: 48, height: 4, bgcolor: colors.gold, borderRadius: 2, mx: "auto" }} />
+        </Box>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "repeat(2, minmax(0, 1fr))",
+              md: "repeat(4, minmax(0, 1fr))",
+            },
+            gap: { xs: 2, sm: 2.5, md: 3 },
+            width: "100%",
+            alignItems: "stretch",
+          }}
         >
-          <Typography variant="h5" sx={{ fontWeight: 600, color: "#1f2937", mb: 1.5 }}>
-            Por que adoção responsável?
-          </Typography>
-          <Typography sx={{ color: "#475569", mb: 1, maxWidth: "800px", mx: "auto" }}>
-            A adoção não é apenas “pegar um pet”. É garantir que o animal será
-            acolhido em um ambiente adequado ao seu porte, energia e rotina da
-            família.
-          </Typography>
-          <Typography sx={{ color: "#475569", mb: 1, maxWidth: "800px", mx: "auto" }}>
-            Quando o processo não considera isso, aumentam as chances de
-            devolução, estresse do animal e frustração de quem adotou.
-          </Typography>
-          <Typography sx={{ color: "#475569", maxWidth: "800px", mx: "auto", fontWeight: 500 }}>
-            Por isso o AdoptMe orienta e recomenda animais com base no seu perfil.
-          </Typography>
-        </Paper>
+          {infoCards.map((card) => (
+            <Paper
+              key={card.title}
+              elevation={0}
+              sx={{
+                ...cardSx,
+                p: { xs: 2.5, sm: 3 },
+                minHeight: 240,
+                height: "100%",
+                maxWidth: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "flex-start",
+                textAlign: "center",
+                transition: "all 0.2s ease",
+                "&:hover": { boxShadow: shadows.hover, transform: "translateY(-4px)" },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: "50%",
+                  bgcolor: card.bg,
+                  color: card.color,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  mb: 2,
+                  flexShrink: 0,
+                }}
+              >
+                {card.icon}
+              </Box>
+              <Typography sx={{ fontWeight: 700, color: colors.text, mb: 1, fontSize: "1rem" }}>
+                {card.title}
+              </Typography>
+              <Typography
+                sx={{
+                  color: colors.textMuted,
+                  fontSize: "0.9rem",
+                  lineHeight: 1.6,
+                  flexGrow: 1,
+                  maxWidth: 280,
+                  mx: "auto",
+                }}
+              >
+                {card.text}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
       </Container>
 
       {/* sobre */}
-      <Box
-        sx={{
-          maxWidth: "900px",
-          margin: "60px auto",
-          padding: "36px 48px",
-          background: "white",
-          borderRadius: "22px",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.06)",
-          textAlign: "left",
-        }}
-      >
-        <Typography
-          variant="h5"
+      <Container maxWidth="md" sx={{ mb: { xs: 5, md: 7 } }}>
+        <Paper
+          elevation={0}
           sx={{
-            fontWeight: 700,
-            color: "#1f2937",
-            mb: 2,
-            textAlign: "center",
+            ...cardSx,
+            p: { xs: 3, md: 5 },
+            textAlign: "left",
+            borderRadius: "18px",
           }}
         >
-          Sobre o AdoptMe
-        </Typography>
-
-        <Typography
-          variant="body1"
-          sx={{
-            color: "#4b5563",
-            lineHeight: 1.65,
-            fontSize: "1.05rem",
-            maxWidth: "90%",
-            margin: "0 auto",
-          }}
-        >
-          {'🐾 O '}
-          <strong>AdoptMe</strong>
-          {' é um sistema web que conecta pessoas interessadas'}
-          em adoção responsável com animais disponíveis para um novo lar.
-        </Typography>
-
-        <Typography
-          variant="body1"
-          sx={{
-            color: "#4b5563",
-            lineHeight: 1.65,
-            fontSize: "1.05rem",
-            maxWidth: "90%",
-            margin: "18px auto 0",
-          }}
-        >
-          {'🤝 Em vez de usar um K fixo de forma literal, o AdoptMe transforma o perfil do adotante e os atributos dos animais em vetores numéricos e usa uma medida de '}
-          <strong>similaridade vetorial ponderada</strong>
-          {' (implementada com utilitários do'}
-          Scikit-Learn) para rankear os pets mais compatíveis. Essa abordagem permite
-          priorizar características importantes e gerar recomendações personalizadas.
-        </Typography>
-
-        <Typography
-          variant="body1"
-          sx={{
-            color: "#4b5563",
-            lineHeight: 1.65,
-            fontSize: "1.05rem",
-            maxWidth: "90%",
-            margin: "18px auto 0",
-          }}
-        >
-          {'💜 É um projeto com foco social e acadêmico, desenvolvido com '}
-          <strong>React, Flask e MySQL</strong>
-          {', com autenticação via Google,'}
-          trazendo modernidade e responsabilidade ao processo de adoção.
-        </Typography>
-      </Box>
+          <Typography variant="h5" sx={{ fontWeight: 800, color: colors.text, mb: 2.5, textAlign: "center" }}>
+            Sobre o AdoptMe
+          </Typography>
+          <Typography sx={{ color: colors.textMuted, lineHeight: 1.75, fontSize: "1.05rem", maxWidth: "90%", margin: "0 auto" }}>
+            {'🐾 O '}
+            <strong>AdoptMe</strong>
+            {' é um sistema web que conecta pessoas interessadas em adoção responsável com animais disponíveis para um novo lar.'}
+          </Typography>
+          <Typography sx={{ color: colors.textMuted, lineHeight: 1.75, fontSize: "1.05rem", maxWidth: "90%", margin: "18px auto 0" }}>
+            {'🤝 Em vez de usar um K fixo de forma literal, o AdoptMe transforma o perfil do adotante e os atributos dos animais em vetores numéricos e usa uma medida de '}
+            <strong>similaridade vetorial ponderada</strong>
+            {' (implementada com utilitários do Scikit-Learn) para rankear os pets mais compatíveis.'}
+          </Typography>
+          <Typography sx={{ color: colors.textMuted, lineHeight: 1.75, fontSize: "1.05rem", maxWidth: "90%", margin: "18px auto 0" }}>
+            {'💜 É um projeto com foco social e acadêmico, desenvolvido com '}
+            <strong>React, Flask e MySQL</strong>
+            {', com autenticação via Google, trazendo modernidade e responsabilidade ao processo de adoção.'}
+          </Typography>
+        </Paper>
+      </Container>
       <Footer />
     </Box>
   );

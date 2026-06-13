@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { animaisApi } from "../api";
 import { Box, Paper, Typography } from "@mui/material";
+import { colors, radii, cardSx } from "../theme";
 
 export default function AdoptionChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [yTicks, setYTicks] = useState([0, 1]); // ticks inteiros para o eixo Y
 
-  const primaryColor = "#6366F1";
+  const primaryColor = colors.primary;
 
   useEffect(() => {
     async function load() {
@@ -69,22 +70,14 @@ export default function AdoptionChart() {
     <Paper
       elevation={0}
       sx={{
-        borderRadius: "1.2rem",
-        p: 3,
-        boxShadow: "0 10px 30px rgba(0,0,0,0.04)",
-        border: "1px solid rgba(15,23,42,0.04)",
-        height: 350,
+        ...cardSx,
+        p: { xs: 3, md: 4 },
+        height: 380,
+        borderRadius: radii.card,
       }}
     >
-      <Typography
-        variant="h6"
-        sx={{
-          mb: 2,
-          fontWeight: 700,
-          color: "#1f2937",
-        }}
-      >
-        Adoções realizadas nos últimos 7 dias 🤩
+      <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, color: colors.text }}>
+        Adoções realizadas nos últimos 7 dias
       </Typography>
 
       <Box sx={{ height: 260 }}>

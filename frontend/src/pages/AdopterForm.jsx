@@ -17,6 +17,9 @@ import HomeIcon from "@mui/icons-material/Home";
 import ChildCareIcon from "@mui/icons-material/ChildCare";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FavoriteBorderIcon from "@mui/icons-material/FavoriteBorder";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import { colors, gradientPrimary, shadows, radii, cardSx, btnGradient, inputSx } from "../theme";
 
 export default function AdopterForm() {
   const navigate = useNavigate();
@@ -59,227 +62,107 @@ export default function AdopterForm() {
     }
   }
 
-  const primaryColor = "#6366F1";
-  const primaryColorHover = "#4F46E5";
+  const fieldSx = {
+    ...inputSx,
+    '& .MuiInputBase-root': {
+      borderRadius: radii.input,
+      bgcolor: colors.background,
+    },
+  };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        bgcolor: "#F9FAFB",
-      }}
-    >
+    <Box sx={{ minHeight: "100vh", bgcolor: colors.background }}>
       <Box
         sx={{
-          height: 62,
-          bgcolor: "#fff",
-          borderBottom: "1px solid rgba(15,23,42,0.05)",
+          height: 68,
+          bgcolor: colors.card,
+          boxShadow: shadows.header,
           display: "flex",
           alignItems: "center",
           px: { xs: 2, md: 6 },
           gap: 1,
         }}
       >
-        <PetsIcon sx={{ color: primaryColor }} />
-        <Typography sx={{ fontWeight: 600, color: "#0f172a" }}>
-          <Box component="span" sx={{ color: primaryColor, fontWeight: 700 }}>
-            AdoptMe
-          </Box>{" "}
-          • Perfil do adotante
+        <Box sx={{ width: 36, height: 36, borderRadius: "10px", background: gradientPrimary, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <PetsIcon sx={{ color: "#fff", fontSize: 20 }} />
+        </Box>
+        <Typography sx={{ fontWeight: 700, color: colors.text }}>
+          <Box component="span" sx={{ color: colors.primary, fontWeight: 800 }}>AdoptMe</Box>
+          {" "}• Perfil do adotante
         </Typography>
       </Box>
 
-      <Box
-        sx={{
-          maxWidth: 820, 
-          mx: "auto",
-          mt: 4,
-          px: { xs: 2, md: 0 },
-          pb: 6,
-        }}
-      >
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: "1.25rem",
-            bgcolor: "#fff",
-            border: "1px solid rgba(15,23,42,0.03)",
-            boxShadow: "0 20px 50px rgba(15,23,42,0.03)",
-            p: { xs: 2.5, md: 3 }, 
-          }}
-        >
-          <Box sx={{ textAlign: "center", mb: 2 }}>
-            <Box
-              sx={{
-                width: 44, 
-                height: 44, 
-                bgcolor: "#EEF2FF",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                mx: "auto",
-                mb: 1.5,
-              }}
-            >
-              <PetsIcon sx={{ color: primaryColor, fontSize: "1.6rem" }} />
+      <Box sx={{ maxWidth: 720, mx: "auto", mt: { xs: 3, md: 5 }, px: { xs: 2, md: 0 }, pb: 6 }}>
+        <Paper elevation={0} sx={{ ...cardSx, p: { xs: 3, md: 4 }, borderRadius: radii.card }}>
+          <Box sx={{ textAlign: "center", mb: 3 }}>
+            <Box sx={{ width: 56, height: 56, bgcolor: "#EEF2FF", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", mx: "auto", mb: 2 }}>
+              <PetsIcon sx={{ color: colors.primary, fontSize: "1.8rem" }} />
             </Box>
-            
-            <Typography
-              variant="h6" 
-              sx={{ fontWeight: 600, color: "#1f2937", mb: 0.5, fontSize: "1.1rem" }} 
-            >
-              Para indicarmos o melhor pet, precisamos te conhecer 🙂
+            <Typography variant="h5" sx={{ fontWeight: 800, color: colors.text, mb: 0.75 }}>
+              Perfil do adotante
             </Typography>
-            <Typography sx={{ color: "#6b7280", fontSize: "0.8rem" }}>
-              Leva menos de 1 minuto. Depois disso já mostramos os animais
-              compatíveis.
+            <Typography sx={{ color: colors.textMuted, fontSize: "0.9rem" }}>
+              Leva menos de 1 minuto. Depois disso já mostramos os animais compatíveis.
             </Typography>
           </Box>
 
-          <Divider sx={{ my: 2 }} />
+          <Box sx={{ bgcolor: colors.goldBg, color: colors.goldText, borderRadius: radii.input, p: 2, mb: 3, display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+            <AutoAwesomeIcon sx={{ fontSize: 22, mt: 0.25 }} />
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: "0.9rem", mb: 0.25 }}>Recomendação inteligente</Typography>
+              <Typography sx={{ fontSize: "0.82rem", lineHeight: 1.5 }}>
+                Suas respostas alimentam o algoritmo de compatibilidade para encontrar o pet ideal.
+              </Typography>
+            </Box>
+          </Box>
+
+          <Divider sx={{ my: 2.5, borderColor: "#F1F5F9" }} />
 
           <form onSubmit={handleSubmit}>
-            <Stack spacing={1.5}> 
-              <TextField
-                size="small" 
-                select
-                label="Tipo de moradia"
-                value={form.tipo_moradia}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, tipo_moradia: e.target.value }))
-                }
-                required
-                fullWidth
-                variant="filled"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <HomeIcon sx={{ color: "#6b7280", fontSize: '1.25rem' }} />
-                    </InputAdornment>
-                  ),
-                  disableUnderline: true,
-                  sx: { borderRadius: "0.9rem", bgcolor: "#f3f4f6" },
-                }}
-              >
+            <Stack spacing={2}>
+              <TextField size="medium" select label="Tipo de moradia" value={form.tipo_moradia} onChange={(e) => setForm((f) => ({ ...f, tipo_moradia: e.target.value }))} required fullWidth sx={fieldSx} InputProps={{ startAdornment: (<InputAdornment position="start"><HomeIcon sx={{ color: colors.primary, fontSize: '1.25rem' }} /></InputAdornment>) }}>
                 <MenuItem value="Apartamento">Apartamento</MenuItem>
                 <MenuItem value="Casa com quintal">Casa com quintal</MenuItem>
                 <MenuItem value="Casa sem quintal">Casa sem quintal</MenuItem>
                 <MenuItem value="Chácara/Sítio">Chácara / sítio</MenuItem>
               </TextField>
 
-              <TextField
-                size="small" 
-                select
-                label="Tem crianças em casa?"
-                value={form.tem_criancas}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    tem_criancas: Number(e.target.value),
-                  }))
-                }
-                fullWidth
-                variant="filled"
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <ChildCareIcon sx={{ color: "#6b7280", fontSize: '1.25rem' }} />
-                    </InputAdornment>
-                  ),
-                  disableUnderline: true,
-                  sx: { borderRadius: "0.9rem", bgcolor: "#f3f4f6" },
-                }}
-              >
+              <TextField size="medium" select label="Tem crianças em casa?" value={form.tem_criancas} onChange={(e) => setForm((f) => ({ ...f, tem_criancas: Number(e.target.value) }))} fullWidth sx={fieldSx} InputProps={{ startAdornment: (<InputAdornment position="start"><ChildCareIcon sx={{ color: colors.primary, fontSize: '1.25rem' }} /></InputAdornment>) }}>
                 <MenuItem value={0}>Não</MenuItem>
                 <MenuItem value={1}>Sim</MenuItem>
               </TextField>
 
-              <TextField
-                size="small" 
-                label="Tempo disponível (horas/semana)"
-                type="number"
-                value={form.tempo_disponivel_horas_semana}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    tempo_disponivel_horas_semana: Number(e.target.value),
-                  }))
-                }
-                required
-                fullWidth
-                variant="filled"
-                helperText="Inclua tempo para passeios, brincadeiras e cuidados."
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <AccessTimeIcon sx={{ color: "#6b7280", fontSize: '1.25rem' }} />
-                    </InputAdornment>
-                  ),
-                  disableUnderline: true,
-                  sx: { borderRadius: "0.9rem", bgcolor: "#f3f4f6" },
-                }}
-                FormHelperTextProps={{
-                  sx: { mt: 0.25, fontSize: "0.7rem", lineHeight: 1.2 }
-                }}
-              />
+              <TextField size="medium" label="Tempo disponível (horas/semana)" type="number" value={form.tempo_disponivel_horas_semana} onChange={(e) => setForm((f) => ({ ...f, tempo_disponivel_horas_semana: Number(e.target.value) }))} required fullWidth sx={fieldSx} helperText="Inclua tempo para passeios, brincadeiras e cuidados." InputProps={{ startAdornment: (<InputAdornment position="start"><AccessTimeIcon sx={{ color: colors.primary, fontSize: '1.25rem' }} /></InputAdornment>) }} />
 
-              <TextField
-                size="small" 
-                select
-                label="Estilo de vida"
-                value={form.estilo_vida}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, estilo_vida: e.target.value }))
-                }
-                required
-                fullWidth
-                variant="filled"
-                helperText="Assim indicamos pets mais calmos ou mais ativos."
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <FavoriteBorderIcon sx={{ color: "#6b7280", fontSize: '1.25rem' }} />
-                    </InputAdornment>
-                  ),
-                  disableUnderline: true,
-                  sx: { borderRadius: "0.9rem", bgcolor: "#f3f4f6" },
-                }}
-                FormHelperTextProps={{
-                  sx: { mt: 0.25, fontSize: "0.7rem", lineHeight: 1.2 }
-                }}
-              >
+              <TextField size="medium" select label="Estilo de vida" value={form.estilo_vida} onChange={(e) => setForm((f) => ({ ...f, estilo_vida: e.target.value }))} required fullWidth sx={fieldSx} helperText="Assim indicamos pets mais calmos ou mais ativos." InputProps={{ startAdornment: (<InputAdornment position="start"><FavoriteBorderIcon sx={{ color: colors.primary, fontSize: '1.25rem' }} /></InputAdornment>) }}>
                 <MenuItem value="Calmo">Calmo</MenuItem>
                 <MenuItem value="Moderado">Moderado</MenuItem>
                 <MenuItem value="Ativo">Ativo</MenuItem>
                 <MenuItem value="Esportivo">Esportivo</MenuItem>
-                <MenuItem value="Fico pouco em casa">
-                  Fico pouco em casa
-                </MenuItem>
+                <MenuItem value="Fico pouco em casa">Fico pouco em casa</MenuItem>
               </TextField>
-              <Button
-                type="submit"
-                size="large"
-                variant="contained"
-                startIcon={<FavoriteBorderIcon />}
-                sx={{
-                  mt: 2,
-                  py: 0.8, 
-                  borderRadius: "9999px",
-                  textTransform: "none",
-                  fontWeight: 600,
-                  fontSize: "0.9rem",
-                  bgcolor: primaryColor,
-                  color: "#fff",
-                  boxShadow: "none",
-                  "&:hover": {
-                    bgcolor: primaryColorHover,
-                    boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
-                  },
-                }}
-              >
+
+              <Box sx={{ bgcolor: '#F5F3FF', borderRadius: radii.input, p: 2, mt: 1 }}>
+                <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: colors.text, mb: 1 }}>O que consideramos na recomendação</Typography>
+                <Stack direction="row" flexWrap="wrap" gap={0.75}>
+                  {['Porte do animal', 'Rotina da família', 'Energia', 'Moradia', 'Crianças'].map((tag) => (
+                    <Box key={tag} sx={{ bgcolor: colors.card, border: `1px solid ${colors.border}`, borderRadius: radii.pill, px: 1.5, py: 0.4, fontSize: '0.75rem', color: colors.textMuted, fontWeight: 500 }}>
+                      {tag}
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+
+              <Button type="submit" size="large" variant="contained" startIcon={<FavoriteBorderIcon />} sx={{ ...btnGradient, mt: 2, py: 1.5, fontSize: '1rem', height: 52 }}>
                 Salvar perfil e ver animais
               </Button>
+
+              <Stack direction="row" alignItems="center" justifyContent="center" spacing={0.75} sx={{ mt: 1 }}>
+                <LockOutlinedIcon sx={{ fontSize: 16, color: colors.textMuted }} />
+                <Typography sx={{ fontSize: '0.78rem', color: colors.textMuted }}>
+                  Suas informações são seguras e utilizadas apenas para recomendações.
+                </Typography>
+              </Stack>
             </Stack>
           </form>
 

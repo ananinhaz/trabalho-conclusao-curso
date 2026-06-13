@@ -29,7 +29,7 @@ describe('Animals (page)', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Animais')).toBeInTheDocument()
+      expect(screen.getByText('Animais para adoção')).toBeInTheDocument()
     })
 
     await user.click(screen.getByLabelText(/espécie/i))

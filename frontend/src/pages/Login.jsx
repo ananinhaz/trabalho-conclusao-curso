@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Stack,
+  Divider,
+  Alert,
+} from "@mui/material";
+import GoogleIcon from "@mui/icons-material/Google";
 import * as api from "../api";
+import { colors, shadows, cardSx, btnGradient, btnOutline, inputSx, radii } from "../theme";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -30,17 +42,16 @@ export default function Login() {
       navigate(next, { replace: true });
     } catch (error) {
       console.error("login error", error);
-      
-      const errorMsg = error instanceof Error 
-        ? error.message // Captura a mensagem de erro do mock
-        : "Erro desconhecido.";
-        
-      if (errorMsg.includes("Credenciais inválidas")) {
-          setMsg({ type: "error", text: "Email ou senha inválidos." });
-      } else {
-          setMsg({ type: "error", text: "Erro de rede ao tentar logar." });
-      }
 
+      const errorMsg = error instanceof Error
+        ? error.message
+        : "Erro desconhecido.";
+
+      if (errorMsg.includes("Credenciais inválidas")) {
+        setMsg({ type: "error", text: "Email ou senha inválidos." });
+      } else {
+        setMsg({ type: "error", text: "Erro de rede ao tentar logar." });
+      }
     } finally {
       setLoading(false);
     }
@@ -56,157 +67,138 @@ export default function Login() {
   }
 
   function goToRecover() {
-
     console.log("Navegar para recuperação de senha.");
   }
 
+  const fieldSx = {
+    ...inputSx,
+    "& .MuiInputBase-root": {
+      borderRadius: radii.input,
+      bgcolor: colors.background,
+    },
+  };
+
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Entrar</h1>
-
-      <form onSubmit={handleSubmit} style={styles.form}>
-        <label style={styles.label}>
-          <span>E-mail</span>
-          <input
-            type="email"
-            placeholder="seu@exemplo.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={styles.input}
-            disabled={loading}
-          />
-        </label>
-        <label style={styles.label}>
-          <span>Senha</span>
-          <input
-            type="password"
-            placeholder="••••••••"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-            style={styles.input}
-            disabled={loading}
-          />
-        </label>
-        <div style={{ marginTop: 10 }}>
-          <button
-            type="submit"
-            style={styles.primaryButton}
-            disabled={loading}
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: colors.background,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 2,
+        py: 4,
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          ...cardSx,
+          width: "100%",
+          maxWidth: 500,
+          borderRadius: "24px",
+          boxShadow: shadows.card,
+          p: { xs: 3, sm: 4 },
+        }}
+      >
+        <Box sx={{ textAlign: "center", mb: 3 }}>
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{ fontWeight: 800, color: colors.text, mb: 1, fontSize: { xs: "1.75rem", sm: "2rem" } }}
           >
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
-        </div>
-      </form>
+            Entrar
+          </Typography>
+          <Typography sx={{ color: colors.textMuted, fontSize: "0.95rem", lineHeight: 1.6 }}>
+            Acesse sua conta para continuar ajudando animais a encontrarem um lar.
+          </Typography>
+        </Box>
 
-      <hr style={styles.separator} />
+        <Box component="form" onSubmit={handleSubmit}>
+          <Stack spacing={2.5}>
+            <TextField
+              label="E-mail"
+              type="email"
+              placeholder="seu@exemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              fullWidth
+              disabled={loading}
+              autoComplete="email"
+              sx={fieldSx}
+            />
+            <TextField
+              label="Senha"
+              type="password"
+              placeholder="••••••••"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              required
+              fullWidth
+              disabled={loading}
+              autoComplete="current-password"
+              sx={fieldSx}
+            />
 
-      <div style={styles.socialAuth}>
-        <button
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={loading}
+              sx={{ ...btnGradient, height: 48, fontSize: "1rem", mt: 0.5 }}
+            >
+              {loading ? "Entrando..." : "Entrar"}
+            </Button>
+          </Stack>
+        </Box>
+
+        <Divider sx={{ my: 3 }}>
+          <Typography sx={{ color: colors.textMuted, fontSize: "0.85rem", fontWeight: 600, px: 1 }}>
+            OU
+          </Typography>
+        </Divider>
+
+        <Button
+          variant="outlined"
+          fullWidth
           onClick={loginWithGoogle}
-          style={styles.secondaryButton}
           disabled={loading}
+          startIcon={<GoogleIcon />}
+          sx={{ ...btnOutline, height: 48, borderRadius: radii.button }}
         >
           Entrar com Google
-        </button>
-        <div style={{ marginTop: 12 }}>
-          <span>
-            Não tem conta?{' '}
-            <button onClick={goToRegister} style={styles.linkButton} disabled={loading}>
-              Criar conta
-            </button>
-          </span>
-        </div>
-      </div>
+        </Button>
 
-      {msg && (
-        <div
-          role="alert"
-          style={{
-            ...styles.alert,
-            color: msg.type === "error" ? "#7a1b1b" : "#1b7a1b",
-            background: msg.type === "error" ? "#ffffee" : "#eefffe",
-            border: `1px solid ${msg.type === "error" ? "#f5c2c2" : "#cde8c9"}`,
-          }}
-        >
-          {msg.text}
-        </div>
-      )}
-    </div>
+        <Typography sx={{ textAlign: "center", mt: 3, color: colors.textMuted, fontSize: "0.9rem" }}>
+          Não tem conta?{" "}
+          <Button
+            onClick={goToRegister}
+            disabled={loading}
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              color: colors.primary,
+              p: 0,
+              minWidth: 0,
+              verticalAlign: "baseline",
+              "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+            }}
+          >
+            Criar conta
+          </Button>
+        </Typography>
+
+        {msg && (
+          <Alert
+            role="alert"
+            severity={msg.type === "error" ? "error" : "success"}
+            sx={{ mt: 2.5, borderRadius: radii.input }}
+          >
+            {msg.text}
+          </Alert>
+        )}
+      </Paper>
+    </Box>
   );
 }
-
-const styles = {
-  container: {
-    maxWidth: 760,
-    margin: "24px auto",
-    padding: 18,
-    fontFamily: "Inter, Roboto, Arial, sans-serif",
-  },
-  title: {
-    margin: "0 0 12px 0",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  label: {
-    display: "flex",
-    flexDirection: "column",
-    fontSize: 14,
-  },
-  input: {
-    marginTop: 6,
-    padding: "8px 10px",
-    fontSize: 14,
-    borderRadius: 6,
-    border: "1px solid #ccc",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  primaryButton: {
-    padding: "8px 14px",
-    borderRadius: 6,
-    border: "none",
-    background: "#6b5cff",
-    color: "#fff",
-    cursor: "pointer",
-    fontSize: 14,
-  },
-  secondaryButton: {
-    padding: "8px 14px",
-    borderRadius: 6,
-    border: "1px solid #6b5cff",
-    background: "#fff",
-    color: "#6b5cff",
-    cursor: "pointer",
-    fontSize: 14,
-  },
-  linkButton: {
-    marginLeft: 6,
-    background: "none",
-    border: "none",
-    color: "#6b5cff",
-    textDecoration: "underline",
-    cursor: "pointer",
-    fontSize: 14,
-  },
-  separator: {
-    margin: "20px 0",
-    borderWidth: "1px 0 0 0",
-    borderStyle: "solid",
-    borderColor: "#eee",
-  },
-  socialAuth: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-  alert: {
-    marginTop: 16,
-    padding: "10px 12px",
-    borderRadius: 6,
-  },
-};

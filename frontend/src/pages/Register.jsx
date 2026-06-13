@@ -1,7 +1,18 @@
-// src/pages/Register.jsx
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Stack,
+  Divider,
+  Alert,
+} from "@mui/material";
+import GoogleIcon from "@mui/icons-material/Google";
 import { authApi } from "../api.js";
+import { colors, shadows, cardSx, btnGradient, btnOutline, inputSx, radii } from "../theme";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -25,7 +36,6 @@ export default function Register() {
     setLoading(true);
     try {
       const resp = await authApi.register(nome, email, senha);
-      // authApi.register já salva access_token em localStorage (se retornado)
       if (resp && resp.access_token) {
         navigate(next, { replace: true });
       } else {
@@ -39,61 +49,145 @@ export default function Register() {
     }
   }
 
+  function goToLogin() {
+    const qs = next && next !== "/" ? `?next=${encodeURIComponent(next)}` : "";
+    navigate(`/login${qs}`);
+  }
+
+  const fieldSx = {
+    ...inputSx,
+    "& .MuiInputBase-root": {
+      borderRadius: radii.input,
+      bgcolor: colors.background,
+    },
+  };
+
   return (
-    <div className="page-register">
-      <h2>Cadastrar</h2>
-      <form onSubmit={handleSubmit}>
-        <label>
-          <span>Nome</span>
-          <input
-            type="text"
-            value={nome}
-            onChange={(ev) => setNome(ev.target.value)}
-            required
-            autoComplete="name"
-          />
-        </label>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: colors.background,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 2,
+        py: 4,
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          ...cardSx,
+          width: "100%",
+          maxWidth: 500,
+          borderRadius: "24px",
+          boxShadow: shadows.card,
+          p: { xs: 3, sm: 4 },
+        }}
+      >
+        <Box sx={{ textAlign: "center", mb: 3 }}>
+          <Typography
+            variant="h4"
+            component="h1"
+            sx={{ fontWeight: 800, color: colors.text, mb: 1, fontSize: { xs: "1.75rem", sm: "2rem" } }}
+          >
+            Criar conta
+          </Typography>
+          <Typography sx={{ color: colors.textMuted, fontSize: "0.95rem", lineHeight: 1.6 }}>
+            Cadastre-se e comece a usar a plataforma AdoptMe.
+          </Typography>
+        </Box>
 
-        <label>
-          <span>E-mail</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(ev) => setEmail(ev.target.value)}
-            required
-            autoComplete="email"
-          />
-        </label>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Stack spacing={2.5}>
+            <TextField
+              label="Nome"
+              type="text"
+              value={nome}
+              onChange={(ev) => setNome(ev.target.value)}
+              required
+              fullWidth
+              disabled={loading}
+              autoComplete="name"
+              sx={fieldSx}
+            />
+            <TextField
+              label="E-mail"
+              type="email"
+              value={email}
+              onChange={(ev) => setEmail(ev.target.value)}
+              required
+              fullWidth
+              disabled={loading}
+              autoComplete="email"
+              sx={fieldSx}
+            />
+            <TextField
+              label="Senha"
+              type="password"
+              value={senha}
+              onChange={(ev) => setSenha(ev.target.value)}
+              required
+              fullWidth
+              disabled={loading}
+              autoComplete="new-password"
+              sx={fieldSx}
+            />
 
-        <label>
-          <span>Senha</span>
-          <input
-            type="password"
-            value={senha}
-            onChange={(ev) => setSenha(ev.target.value)}
-            required
-            autoComplete="new-password"
-          />
-        </label>
+            {error && (
+              <Alert severity="error" sx={{ borderRadius: radii.input }}>
+                {error}
+              </Alert>
+            )}
 
-        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
+            <Button
+              type="submit"
+              variant="contained"
+              fullWidth
+              disabled={loading}
+              sx={{ ...btnGradient, height: 48, fontSize: "1rem", mt: 0.5 }}
+            >
+              {loading ? "Criando conta..." : "Criar conta"}
+            </Button>
+          </Stack>
+        </Box>
 
-        <button type="submit" disabled={loading}>
-          {loading ? "Cadastrando..." : "Cadastrar"}
-        </button>
-      </form>
+        <Divider sx={{ my: 3 }}>
+          <Typography sx={{ color: colors.textMuted, fontSize: "0.85rem", fontWeight: 600, px: 1 }}>
+            OU
+          </Typography>
+        </Divider>
 
-      <hr />
-
-      <div>
-        <button
-          onClick={() => {
-            authApi.loginWithGoogle(next);
-          }}
+        <Button
+          variant="outlined"
+          fullWidth
+          onClick={() => authApi.loginWithGoogle(next)}
+          disabled={loading}
+          startIcon={<GoogleIcon />}
+          sx={{ ...btnOutline, height: 48, borderRadius: radii.button }}
         >
           Cadastrar com Google
-        </button>
-      </div>
-    </div>
+        </Button>
+
+        <Typography sx={{ textAlign: "center", mt: 3, color: colors.textMuted, fontSize: "0.9rem" }}>
+          Já possui conta?{" "}
+          <Button
+            onClick={goToLogin}
+            disabled={loading}
+            sx={{
+              textTransform: "none",
+              fontWeight: 600,
+              color: colors.primary,
+              p: 0,
+              minWidth: 0,
+              verticalAlign: "baseline",
+              "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+            }}
+          >
+            Entrar
+          </Button>
+        </Typography>
+      </Paper>
+    </Box>
   );
 }

@@ -29,7 +29,7 @@ describe('Register (page)', () => {
     await user.type(screen.getByLabelText(/nome/i), 'Ana')
     await user.type(screen.getByLabelText(/e-?mail/i), 'ana@exemplo.com')
     await user.type(screen.getByLabelText(/senha/i), 'senha123')
-    await user.click(screen.getByRole('button', { name: /^Cadastrar$/i }))
+    await user.click(screen.getByRole('button', { name: /^Criar conta$/i }))
 
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith('Ana', 'ana@exemplo.com', 'senha123')
@@ -45,7 +45,7 @@ describe('Register (page)', () => {
       </MemoryRouter>
     )
 
-    fireEvent.submit(screen.getByRole('button', { name: /^Cadastrar$/i }).closest('form'))
+    fireEvent.submit(screen.getByRole('button', { name: /^Criar conta$/i }).closest('form'))
 
     expect(await screen.findByText('Preencha todos os campos.')).toBeInTheDocument()
   })
@@ -66,7 +66,7 @@ describe('Register (page)', () => {
     await user.type(screen.getByLabelText(/nome/i), 'Ana')
     await user.type(screen.getByLabelText(/e-?mail/i), 'dup@exemplo.com')
     await user.type(screen.getByLabelText(/senha/i), 'senha123')
-    await user.click(screen.getByRole('button', { name: /^Cadastrar$/i }))
+    await user.click(screen.getByRole('button', { name: /^Criar conta$/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Email já existe')).toBeInTheDocument()
@@ -89,7 +89,7 @@ describe('Register (page)', () => {
     await user.type(screen.getByLabelText(/nome/i), 'Ana')
     await user.type(screen.getByLabelText(/e-?mail/i), 'dup@exemplo.com')
     await user.type(screen.getByLabelText(/senha/i), 'senha123')
-    await user.click(screen.getByRole('button', { name: /^Cadastrar$/i }))
+    await user.click(screen.getByRole('button', { name: /^Criar conta$/i }))
 
     await waitFor(() => {
       expect(screen.getByText('Email já cadastrado')).toBeInTheDocument()
