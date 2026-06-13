@@ -26,8 +26,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const js = await api.authApi.login(email.trim().toLowerCase(), senha);
-      // ...
+      await api.authApi.login(email.trim().toLowerCase(), senha);
+      navigate(next, { replace: true });
     } catch (error) {
       console.error("login error", error);
       
@@ -51,7 +51,8 @@ export default function Login() {
   }
 
   function goToRegister() {
-    navigate("/auth/register");
+    const qs = next && next !== "/" ? `?next=${encodeURIComponent(next)}` : "";
+    navigate(`/register${qs}`);
   }
 
   function goToRecover() {

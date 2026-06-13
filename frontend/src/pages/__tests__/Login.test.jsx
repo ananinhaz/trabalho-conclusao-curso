@@ -157,10 +157,10 @@ describe('Login (page)', () => {
     const user = userEvent.setup()
 
     render(
-      <MemoryRouter initialEntries={['/auth/login']}>
+      <MemoryRouter initialEntries={['/login']}>
         <Routes>
-          <Route path="/auth/login" element={<Login />} />
-          <Route path="/auth/register" element={<div>Página de registro</div>} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<div>Página de registro</div>} />
         </Routes>
       </MemoryRouter>
     )

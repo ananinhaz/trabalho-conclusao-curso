@@ -1,6 +1,5 @@
 # backend/app/__init__.py
 import os
-import urllib.parse
 from flask import Flask, current_app
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -11,19 +10,6 @@ from dotenv import load_dotenv
 # keep your db/migrate vars if used elsewhere
 db = SQLAlchemy()
 migrate = Migrate()
-
-
-def _normalize_database_url(url: str) -> str:
-    if not url or url.lower().startswith("sqlite:"):
-        return url
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
-    parsed = urllib.parse.urlsplit(url)
-    qs = parsed.query
-    if "sslmode=" not in qs:
-        qs = (qs + "&sslmode=require") if qs else "sslmode=require"
-        url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, qs, parsed.fragment))
-    return url
 
 
 def create_app():
@@ -45,9 +31,13 @@ def create_app():
     app.config["FRONT_HOME"] = FRONT_HOME
 
     # Database
+    from .extensions.db import normalize_database_url
+
     raw_db = os.getenv("DATABASE_URL")
     if raw_db:
-        app.config['SQLALCHEMY_DATABASE_URI'] = _normalize_database_url(raw_db)
+        app.config['SQLALCHEMY_DATABASE_URI'] = normalize_database_url(
+            raw_db, for_sqlalchemy=True
+        )
         app.logger.info("Using DATABASE_URL from env.")
     else:
         here = os.path.abspath(os.path.dirname(__file__))
