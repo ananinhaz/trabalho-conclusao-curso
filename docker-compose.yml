@@ -28,10 +28,10 @@ services:
       FLASK_SECRET_KEY: secret123
       JWT_SECRET_KEY: jwt123
       JWT_SECRET: jwt123
-      FRONT_HOME: http://localhost:5173
+      FRONT_HOME: http://18.226.20.196:5173
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:5000/api/auth/google/callback}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://18.226.20.196:5000/api/auth/google/callback}
     depends_on:
       db:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:5000/api
+        VITE_API_URL: http://18.226.20.196:5000/api
     container_name: tcc_frontend
     restart: always
     ports:

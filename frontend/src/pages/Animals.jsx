@@ -226,7 +226,7 @@ export default function Animals({ user: userProp }) {
     const candidates = [user?.avatar_url, user?.photo_url, user?.avatar, user?.picture, user?.photo, user?.profile_image]
     let src = candidates.find(Boolean) || ''
     if (src && src.startsWith('/')) {
-      const FRONT_HOST = process.env.REACT_APP_FRONT_HOME || 'http://localhost:5173'
+      const FRONT_HOST = import.meta.env.VITE_FRONT_HOME || window.location.origin
       src = FRONT_HOST.replace(/\/$/, '') + src
     }
     return src
