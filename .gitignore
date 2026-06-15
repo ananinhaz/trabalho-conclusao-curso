@@ -30,6 +30,10 @@ backend/coverage.xml
 backend/.coverage
 frontend/coverage/
 
+# Certificados Let's Encrypt (gerados na EC2; não commitar)
+certbot/conf/
+certbot/www/
+
 # SO
 .DS_Store
 Thumbs.db
