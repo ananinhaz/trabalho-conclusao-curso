@@ -31,7 +31,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           script_stop: true
-          command_timeout: 30m
+          command_timeout: 60m
           script: |
             set -euo pipefail
             cd "$HOME/trabalho-conclusao-curso"
