@@ -24,7 +24,7 @@ cp "$NGINX_BACKUP" nginx/nginx.conf
 mkdir -p certbot/www certbot/conf
 
 # --- Build: somente frontend e backend ---
-docker compose build --no-cache frontend backend
+docker compose build frontend backend 2>&1
 
 # --- Subir serviços sem derrubar o banco nem volumes ---
 # db: apenas garante que está rodando (sem --force-recreate, sem rebuild)
