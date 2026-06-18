@@ -1,6 +1,7 @@
 ﻿import os
 
 import app as app_pkg
+from app.constants import DOCKER_POSTGRES_DSN
 from app.extensions.db import normalize_database_url
 
 
@@ -11,7 +12,7 @@ def test_normalize_database_url_variants():
     assert pg.startswith("postgresql+psycopg2://")
     assert "sslmode=require" in pg
 
-    local = normalize_database_url("postgresql://postgres:postgres@db:5432/adoptme")
+    local = normalize_database_url(DOCKER_POSTGRES_DSN)
     assert "sslmode=disable" in local
 
 

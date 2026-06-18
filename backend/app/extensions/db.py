@@ -5,6 +5,12 @@ import urllib.parse
 from contextlib import contextmanager
 from typing import Optional, Any, Dict
 
+from ..constants import (
+    POSTGRESQL_PSYCOPG2_SCHEME,
+    POSTGRESQL_URL_SCHEME,
+    POSTGRES_URL_SCHEME,
+)
+
 _LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "db", "postgres", "::1"})
 
 
@@ -12,13 +18,13 @@ def normalize_database_url(url: str, *, for_sqlalchemy: bool = False) -> str:
     """Normaliza DSN Postgres: driver e sslmode (disable local, require remoto)."""
     if not url or url.lower().startswith("sqlite:"):
         return url
-    if url.startswith("postgres://"):
-        repl = "postgresql+psycopg2://" if for_sqlalchemy else "postgresql://"
-        url = url.replace("postgres://", repl, 1)
-    elif for_sqlalchemy and url.startswith("postgresql://"):
+    if url.startswith(POSTGRES_URL_SCHEME):
+        repl = POSTGRESQL_PSYCOPG2_SCHEME if for_sqlalchemy else POSTGRESQL_URL_SCHEME
+        url = url.replace(POSTGRES_URL_SCHEME, repl, 1)
+    elif for_sqlalchemy and url.startswith(POSTGRESQL_URL_SCHEME):
         scheme = url.split(":", 1)[0]
         if "+psycopg2" not in scheme:
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            url = url.replace(POSTGRESQL_URL_SCHEME, POSTGRESQL_PSYCOPG2_SCHEME, 1)
 
     parsed = urllib.parse.urlsplit(url)
     host = (parsed.hostname or "").lower()

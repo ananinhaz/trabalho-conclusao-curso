@@ -2,7 +2,6 @@
 from __future__ import annotations
 import os
 import logging
-from typing import Optional, Dict, Any
 
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.base_client.errors import MismatchingStateError

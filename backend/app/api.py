@@ -4,10 +4,20 @@ import os
 import base64
 import json
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
+from .constants import (
+    ERR_UNAUTHENTICATED,
+    SQL_DELETE_ANIMAL_BY_ID,
+    SQL_INSERT_ANIMAL,
+    SQL_INSERT_PERFIL_VALUES,
+    SQL_SELECT_ANIMAL_BY_ID,
+    SQL_SELECT_ANIMAL_ROW,
+    SQL_SELECT_ANIMAL_ROW_NO_OWNER,
+    SQL_SELECT_DONOR_BY_ANIMAL_ID,
+)
 from .extensions import db as db_ext
 
 try:
@@ -255,7 +265,7 @@ def _build_animal_vector(a: dict) -> list[float]:
 def get_perfil_adotante():
     uid = _require_auth()
     if not uid:
-        return _json_error("unauthenticated", 401)
+        return _json_error(ERR_UNAUTHENTICATED, 401)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
@@ -276,7 +286,7 @@ def get_perfil_adotante():
 def upsert_perfil_adotante():
     uid = _require_auth()
     if not uid:
-        return _json_error("unauthenticated", 401)
+        return _json_error(ERR_UNAUTHENTICATED, 401)
     data = request.get_json(silent=True) or {}
     tipo_moradia = (data.get("tipo_moradia") or "").strip()
     tem_criancas = to_bool_like(data.get("tem_criancas"))
@@ -291,11 +301,8 @@ def upsert_perfil_adotante():
         with conn.cursor() as cur:
             if is_postgres() or is_sqlite():
                 cur.execute(
-                    """
-                    INSERT INTO perfil_adotante
-                        (usuario_id, tipo_moradia, tem_criancas,
-                         tempo_disponivel_horas_semana, estilo_vida)
-                    VALUES (%s, %s, %s, %s, %s)
+                    SQL_INSERT_PERFIL_VALUES
+                    + """
                     ON CONFLICT (usuario_id) DO UPDATE
                       SET tipo_moradia = EXCLUDED.tipo_moradia,
                           tem_criancas = EXCLUDED.tem_criancas,
@@ -306,11 +313,8 @@ def upsert_perfil_adotante():
                 )
             else:
                 cur.execute(
-                    """
-                    INSERT INTO perfil_adotante
-                        (usuario_id, tipo_moradia, tem_criancas,
-                         tempo_disponivel_horas_semana, estilo_vida)
-                    VALUES (%s, %s, %s, %s, %s)
+                    SQL_INSERT_PERFIL_VALUES
+                    + """
                     ON DUPLICATE KEY UPDATE
                         tipo_moradia = VALUES(tipo_moradia),
                         tem_criancas = VALUES(tem_criancas),
@@ -370,7 +374,7 @@ def list_animais():
 def create_animal():
     uid = _require_auth()
     if not uid:
-        return _json_error("unauthenticated", 401)
+        return _json_error(ERR_UNAUTHENTICATED, 401)
     data = request.get_json(silent=True) or {}
     def _safe_strip(v):
         if v is None: return None
@@ -397,14 +401,7 @@ def create_animal():
         with conn.cursor() as cur:
             if is_postgres():
                 cur.execute(
-                    """
-                    INSERT INTO animais
-                        (doador_id, nome, especie, raca, idade, porte,
-                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
-                         energia, bom_com_criancas)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    RETURNING id
-                    """,
+                    SQL_INSERT_ANIMAL + "\n                    RETURNING id",
                     (
                         uid, nome, especie, raca, idade, porte,
                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
@@ -415,13 +412,7 @@ def create_animal():
                 animal_id = row[0] if row else None
             else:
                 cur.execute(
-                    """
-                    INSERT INTO animais
-                        (doador_id, nome, especie, raca, idade, porte,
-                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
-                         energia, bom_com_criancas)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    """,
+                    SQL_INSERT_ANIMAL,
                     (
                         uid, nome, especie, raca, idade, porte,
                         descricao, cidade, photo_url, donor_name, donor_whatsapp,
@@ -439,14 +430,7 @@ def get_animal(aid: int):
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
-                """
-                SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       doador_id, criado_em AS created_at,
-                       energia, bom_com_criancas, adotado_em
-                  FROM animais
-                 WHERE id=%s
-                """,
+                SQL_SELECT_ANIMAL_ROW + "\n                 WHERE id=%s",
                 (aid,),
             )
             row = cur.fetchone()
@@ -465,7 +449,7 @@ def get_animal(aid: int):
 def update_animal(aid: int):
     uid = _require_auth()
     if not uid:
-        return _json_error("unauthenticated", 401)
+        return _json_error(ERR_UNAUTHENTICATED, 401)
     data = request.get_json(silent=True) or {}
     adotado_em = data.get("adotado_em")
     def _safe_strip_val(v):
@@ -484,7 +468,7 @@ def update_animal(aid: int):
     bom_com_criancas = to_bool_like(data.get("bom_com_criancas"))
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT * FROM animais WHERE id=%s", (aid,))
+            cur.execute(SQL_SELECT_ANIMAL_BY_ID, (aid,))
             owner = cur.fetchone()
             if not owner:
                 return _json_error("not found", 404)
@@ -517,32 +501,24 @@ def update_animal(aid: int):
 @bp_api.delete("/animais/<int:aid>")
 def delete_animal(aid: int):
     uid = _require_auth()
-    if not uid: return _json_error("unauthenticated", 401)
+    if not uid: return _json_error(ERR_UNAUTHENTICATED, 401)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
+            cur.execute(SQL_SELECT_DONOR_BY_ANIMAL_ID, (aid,))
             owner = cur.fetchone()
             if not owner: return _json_error("not found", 404)
             if int(owner.get("doador_id") or 0) != int(uid): return _json_error("forbidden", 403)
-            cur.execute("DELETE FROM animais WHERE id=%s", (aid,))
+            cur.execute(SQL_DELETE_ANIMAL_BY_ID, (aid,))
     return jsonify({"ok": True})
 
 @bp_api.get("/animais/mine")
 def animais_mine():
     uid = _require_auth()
-    if not uid: return _json_error("unauthenticated", 401)
+    if not uid: return _json_error(ERR_UNAUTHENTICATED, 401)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(
-                """
-                SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       doador_id, criado_em AS created_at,
-                       energia, bom_com_criancas, adotado_em
-                  FROM animais
-                 WHERE doador_id = %s
-                 ORDER BY criado_em DESC
-                """,
+                SQL_SELECT_ANIMAL_ROW + "\n                 WHERE doador_id = %s\n                 ORDER BY criado_em DESC",
                 (uid,),
             )
             rows = cur.fetchall() or []
@@ -560,15 +536,7 @@ def recomendacoes():
         try:
             cur = conn.cursor()
             cur.execute(
-                """
-                SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp,
-                       criado_em AS created_at,
-                       energia, bom_com_criancas, adotado_em
-                  FROM animais
-                 ORDER BY criado_em DESC
-                 LIMIT %s
-                """,
+                SQL_SELECT_ANIMAL_ROW_NO_OWNER + "\n                 ORDER BY criado_em DESC\n                 LIMIT %s",
                 (n,),
             )
             rows = cur.fetchall() or []
@@ -622,15 +590,7 @@ def recomendacoes():
         with db_ext.db() as conn:
             with conn.cursor(dictionary=True) as cur:
                 cur.execute(
-                    """
-                    SELECT id, nome, especie, raca, idade, porte, descricao,
-                           cidade, photo_url, donor_name, donor_whatsapp,
-                           criado_em AS created_at,
-                           energia, bom_com_criancas, adotado_em
-                      FROM animais
-                     ORDER BY criado_em DESC
-                     LIMIT %s
-                    """,
+                    SQL_SELECT_ANIMAL_ROW_NO_OWNER + "\n                     ORDER BY criado_em DESC\n                     LIMIT %s",
                     (n,),
                 )
                 rows = cur.fetchall() or []
@@ -639,15 +599,7 @@ def recomendacoes():
     # se tem perfil, pega todos os animais e aplica IA (KNN ponderado)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
-            cur.execute(
-                """
-                SELECT id, nome, especie, raca, idade, porte, descricao,
-                       cidade, photo_url, donor_name, donor_whatsapp, doador_id,
-                       criado_em AS created_at,
-                       energia, bom_com_criancas, adotado_em
-                  FROM animais
-                """
-            )
+            cur.execute(SQL_SELECT_ANIMAL_ROW)
             animals = cur.fetchall() or []
 
     # aplica filtros rígidos(fixos
@@ -754,7 +706,7 @@ def recomendacoes():
 def adopt_animal(aid: int):
     uid = _require_auth()
     if not uid:
-        return _json_error("unauthenticated", 401)
+        return _json_error(ERR_UNAUTHENTICATED, 401)
     data = request.get_json(silent=True) or {}
     action = (data.get("action") or "mark").lower()
     if action not in ("mark", "undo"):
@@ -764,7 +716,7 @@ def adopt_animal(aid: int):
         # usa o contexto padrão (devolve conn compatível com cursor(dictionary=True))
         with db_ext.db() as conn:
             with conn.cursor(dictionary=True) as cur:
-                cur.execute("SELECT doador_id FROM animais WHERE id=%s", (aid,))
+                cur.execute(SQL_SELECT_DONOR_BY_ANIMAL_ID, (aid,))
                 owner = cur.fetchone()
                 if not owner:
                     return _json_error("not found", 404)
@@ -784,14 +736,7 @@ def adopt_animal(aid: int):
             # busca o registro atualizado
             with conn.cursor(dictionary=True) as cur2:
                 cur2.execute(
-                    """
-                    SELECT id, nome, especie, raca, idade, porte, descricao,
-                           cidade, photo_url, donor_name, donor_whatsapp,
-                           doador_id, criado_em AS created_at, energia, bom_com_criancas,
-                           adotado_em
-                      FROM animais
-                     WHERE id=%s
-                    """,
+                    SQL_SELECT_ANIMAL_ROW + "\n                     WHERE id=%s",
                     (aid,),
                 )
                 row = cur2.fetchone()
@@ -799,7 +744,7 @@ def adopt_animal(aid: int):
     except Exception as e:
         import traceback
         tb = traceback.format_exc()
-        current_app.logger.error("ERROR adopt_animal: %s\n%s", str(e), tb)
+        current_app.logger.exception("ERROR adopt_animal: %s", e)
         return jsonify({"ok": False, "error": "internal", "message": str(e), "trace": tb}), 500
 
     if not row:
@@ -825,7 +770,7 @@ def adoption_metrics():
     if days <= 0:
         days = 7
     days = min(days, 90)
-    end = datetime.utcnow().date()
+    end = datetime.now(timezone.utc).date()
     start = end - timedelta(days=days - 1)
     sql = """
         SELECT DATE(adotado_em) AS day, COUNT(*) AS cnt

@@ -21,7 +21,7 @@ services:
     container_name: tcc_backend
     restart: always
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/adoptme
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/adoptme}
       SECRET_KEY: secret123
       FLASK_SECRET_KEY: secret123
       JWT_SECRET_KEY: jwt123

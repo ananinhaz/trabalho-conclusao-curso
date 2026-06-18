@@ -1,0 +1,39 @@
+name: CD - Deploy Production (EC2)
+
+on:
+  # Dispara após o CI na main passar com sucesso
+  workflow_run:
+    workflows: ["CI - Tests → SonarCloud"]
+    types: [completed]
+    branches: [main]
+  # Deploy manual pelo GitHub Actions
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 60m
+          script: |
+            set -euo pipefail
+            cd "$HOME/trabalho-conclusao-curso"
+            echo "==> Deploy AdoptMe (ref: ${{ github.event.workflow_run.head_sha || github.sha }})"
+            bash scripts/deploy-ec2.sh

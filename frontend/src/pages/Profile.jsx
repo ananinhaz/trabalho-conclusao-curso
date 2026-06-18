@@ -25,7 +25,6 @@ export default function Profile() {
   const [user, setUser] = useState(null);
   const [mineCount, setMineCount] = useState(0);
   const [hasPerfil, setHasPerfil] = useState(false);
-  const [loading, setLoading] = useState(true);
 
   const initials = (name) =>
     (name || "U")
@@ -39,7 +38,6 @@ export default function Profile() {
     let alive = true;
     (async () => {
       try {
-        setLoading(true);
         const me = await authApi.me();
         if (me && me.user) {
           if (!alive) return;
@@ -80,8 +78,6 @@ export default function Profile() {
         console.debug("profile load:", err);
         if (!alive) return;
         setUser(null);
-      } finally {
-        if (alive) setLoading(false);
       }
     })();
 
@@ -90,9 +86,9 @@ export default function Profile() {
     };
   }, []);
 
-  async function handleLogout() {
+  function handleLogout() {
     try {
-      await authApi.logout();
+      authApi.logout();
     } catch (err) {
     } finally {
       // manda pro login/landing

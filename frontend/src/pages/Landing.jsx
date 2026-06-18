@@ -528,8 +528,8 @@ export default function Landing() {
           </Typography>
           <Typography sx={{ color: colors.textMuted, lineHeight: 1.75, fontSize: "1.05rem", maxWidth: "90%", margin: "18px auto 0" }}>
             {'💜 É um projeto com foco social e acadêmico, desenvolvido com '}
-            <strong>React, Flask e MySQL</strong>
-            {', com autenticação via Google, trazendo modernidade e responsabilidade ao processo de adoção.'}
+            <strong>React, Flask e PostgreSQL</strong>
+            {', containerizada com Docker e hospedada em infraestrutura AWS, com autenticação via Google, trazendo modernidade e responsabilidade ao processo de adoção.'}
           </Typography>
         </Paper>
       </Container>

@@ -1,15 +1,9 @@
 # backend/app/__init__.py
 import os
-from flask import Flask, current_app
+from flask import Flask, request
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from dotenv import load_dotenv
-
-# keep your db/migrate vars if used elsewhere
-db = SQLAlchemy()
-migrate = Migrate()
 
 
 def create_app():
@@ -29,22 +23,6 @@ def create_app():
     # FRONT_HOME from env (used by oauth redirect construction and by CORS)
     FRONT_HOME = os.getenv("FRONT_HOME", "http://127.0.0.1:5173").rstrip("/")
     app.config["FRONT_HOME"] = FRONT_HOME
-
-    # Database
-    from .extensions.db import normalize_database_url
-
-    raw_db = os.getenv("DATABASE_URL")
-    if raw_db:
-        app.config['SQLALCHEMY_DATABASE_URI'] = normalize_database_url(
-            raw_db, for_sqlalchemy=True
-        )
-        app.logger.info("Using DATABASE_URL from env.")
-    else:
-        here = os.path.abspath(os.path.dirname(__file__))
-        app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(here,'..','dev.db')}"
-        app.logger.warning("No DATABASE_URL found — using sqlite fallback.")
-
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # JWT
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "DEV_JWT_SECRET_CHANGE_ME")
@@ -71,7 +49,6 @@ def create_app():
 )
 
     # preflight quick response
-    from flask import request
     @app.before_request
     def _preflight():
         if request.method == "OPTIONS":

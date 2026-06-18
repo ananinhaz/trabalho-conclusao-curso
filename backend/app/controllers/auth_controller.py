@@ -1,7 +1,6 @@
 ﻿# backend/app/controllers/auth_controller.py
 from __future__ import annotations
 import os
-from urllib.parse import urljoin
 import requests
 
 from flask import (
@@ -16,8 +15,18 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 
-from app.extensions.db import db  # Fix: import db directly for context-manager API
+from app.constants import (
+    SQL_INSERT_USER_GOOGLE,
+    SQL_INSERT_USER_GOOGLE_RETURNING,
+    SQL_INSERT_USER_PASSWORD,
+    SQL_INSERT_USER_PASSWORD_RETURNING,
+    SQL_USER_BY_ID,
+    SQL_USER_ID_BY_EMAIL,
+    SQL_USER_ID_BY_GOOGLE_SUB,
+    SQL_USER_LOGIN_BY_EMAIL,
+)
 import app.extensions.db as db_module  # For using_postgres()
+from app.extensions.db import db  # Fix: import db directly for context-manager API
 
 # oauth provider inicializado via init_oauth
 from app.extensions.oauth import oauth
@@ -44,11 +53,11 @@ def _get_user_by_id(uid: int):
         with db() as conn:
             try:
                 with conn.cursor(dictionary=True) as cur:
-                    cur.execute("SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s", (uid,))
+                    cur.execute(SQL_USER_BY_ID, (uid,))
                     return safe_fetchone(cur)
             except TypeError:
                 cur = conn.cursor()
-                cur.execute("SELECT id, nome, email, avatar_url FROM usuarios WHERE id=%s", (uid,))
+                cur.execute(SQL_USER_BY_ID, (uid,))
                 row = safe_fetchone(cur)
                 cur.close()
                 return row
@@ -85,12 +94,12 @@ def register():
             # verificar se email já existe
             try:
                 with conn.cursor(dictionary=True) as cur:
-                    cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                    cur.execute(SQL_USER_ID_BY_EMAIL, (email,))
                     if safe_fetchone(cur):
                         return jsonify(ok=False, error="Email já cadastrado"), 400
             except TypeError:
                 cur = conn.cursor()
-                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                cur.execute(SQL_USER_ID_BY_EMAIL, (email,))
                 if safe_fetchone(cur):
                     return jsonify(ok=False, error="Email já cadastrado"), 400
 
@@ -100,7 +109,7 @@ def register():
             if is_postgres_db():
                 cur = conn.cursor()
                 cur.execute(
-                    "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s) RETURNING id",
+                    SQL_INSERT_USER_PASSWORD_RETURNING,
                     (nome, email, pw_hash),
                 )
                 row = safe_fetchone(cur)
@@ -108,7 +117,7 @@ def register():
             else:
                 cur = conn.cursor()
                 cur.execute(
-                    "INSERT INTO usuarios (nome,email,password_hash) VALUES (%s,%s,%s)",
+                    SQL_INSERT_USER_PASSWORD,
                     (nome, email, pw_hash),
                 )
                 user_id = int(getattr(cur, "lastrowid", None))
@@ -137,11 +146,11 @@ def login():
         with db() as conn:
             try:
                 with conn.cursor(dictionary=True) as cur:
-                    cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
+                    cur.execute(SQL_USER_LOGIN_BY_EMAIL, (email,))
                     row = safe_fetchone(cur)
             except TypeError:
                 cur = conn.cursor()
-                cur.execute("SELECT id, password_hash FROM usuarios WHERE email=%s", (email,))
+                cur.execute(SQL_USER_LOGIN_BY_EMAIL, (email,))
                 row = safe_fetchone(cur)
 
     except Exception as exc:
@@ -228,14 +237,14 @@ def google_callback():
         with db() as conn:
             # procurar por google_sub
             cur = conn.cursor()
-            cur.execute("SELECT id FROM usuarios WHERE google_sub=%s", (sub,))
+            cur.execute(SQL_USER_ID_BY_GOOGLE_SUB, (sub,))
             r = safe_fetchone(cur)
 
             if r:
                 user_id = int(r[0])
             else:
                 # procurar por email
-                cur.execute("SELECT id FROM usuarios WHERE email=%s", (email,))
+                cur.execute(SQL_USER_ID_BY_EMAIL, (email,))
                 r2 = safe_fetchone(cur)
                 if r2:
                     user_id = int(r2[0])
@@ -247,14 +256,14 @@ def google_callback():
                     # criar novo
                     if is_postgres_db():
                         cur.execute(
-                            "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s) RETURNING id",
+                            SQL_INSERT_USER_GOOGLE_RETURNING,
                             (name, email, sub, avatar),
                         )
                         row = safe_fetchone(cur)
                         user_id = int(row[0])
                     else:
                         cur.execute(
-                            "INSERT INTO usuarios (nome,email,google_sub,avatar_url) VALUES (%s,%s,%s,%s)",
+                            SQL_INSERT_USER_GOOGLE,
                             (name, email, sub, avatar),
                         )
                         user_id = int(getattr(cur, "lastrowid", None))
