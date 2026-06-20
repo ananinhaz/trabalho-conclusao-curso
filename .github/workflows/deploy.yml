@@ -1,0 +1,91 @@
+name: CD - Deploy Production (EC2)
+
+on:
+  # Dispara após o CI na main passar com sucesso
+  workflow_run:
+    workflows: ["CI - Tests → SonarCloud"]
+    types: [completed]
+    branches: [main]
+  # Deploy manual pelo GitHub Actions
+  workflow_dispatch:
+
+permissions:
+  packages: write
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/ananinhaz/adoptme-backend
+  FRONTEND_IMAGE: ghcr.io/ananinhaz/adoptme-frontend
+
+jobs:
+  build-and-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.event.workflow_run.head_sha || github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            VITE_API_URL=https://adoptme.com.br/api
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.event.workflow_run.head_sha || github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "ananinhaz" --password-stdin
+            cd "$HOME/trabalho-conclusao-curso"
+            echo "==> Deploy AdoptMe (ref: ${{ github.event.workflow_run.head_sha || github.sha }})"
+            bash scripts/deploy-ec2.sh

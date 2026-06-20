@@ -1,41 +1,8 @@
 ﻿from __future__ import annotations
 import os
 import sqlite3
-import urllib.parse
 from contextlib import contextmanager
 from typing import Optional, Any, Dict
-
-from ..constants import (
-    POSTGRESQL_PSYCOPG2_SCHEME,
-    POSTGRESQL_URL_SCHEME,
-    POSTGRES_URL_SCHEME,
-)
-
-_LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "db", "postgres", "::1"})
-
-
-def normalize_database_url(url: str, *, for_sqlalchemy: bool = False) -> str:
-    """Normaliza DSN Postgres: driver e sslmode (disable local, require remoto)."""
-    if not url or url.lower().startswith("sqlite:"):
-        return url
-    if url.startswith(POSTGRES_URL_SCHEME):
-        repl = POSTGRESQL_PSYCOPG2_SCHEME if for_sqlalchemy else POSTGRESQL_URL_SCHEME
-        url = url.replace(POSTGRES_URL_SCHEME, repl, 1)
-    elif for_sqlalchemy and url.startswith(POSTGRESQL_URL_SCHEME):
-        scheme = url.split(":", 1)[0]
-        if "+psycopg2" not in scheme:
-            url = url.replace(POSTGRESQL_URL_SCHEME, POSTGRESQL_PSYCOPG2_SCHEME, 1)
-
-    parsed = urllib.parse.urlsplit(url)
-    host = (parsed.hostname or "").lower()
-    qs = parsed.query
-    if "sslmode=" not in qs:
-        sslmode = "disable" if host in _LOCAL_DB_HOSTS else "require"
-        qs = (qs + f"&sslmode={sslmode}") if qs else f"sslmode={sslmode}"
-        url = urllib.parse.urlunsplit(
-            (parsed.scheme, parsed.netloc, parsed.path, qs, parsed.fragment)
-        )
-    return url
 
 # MySQL imports
 try:
@@ -68,7 +35,6 @@ _sqlite_path: Optional[str] = None
 
 
 def using_postgres() -> bool:
-    """Getter simples para saber qual driver estÃ¡ em uso."""
     return _using_postgres
 
 
@@ -129,7 +95,6 @@ class _SQLiteCursorWrapper:
 
 
 class _SQLiteConnectionWrapper:
-    """Wrapper para conexÃ£o SQLite compatÃ­vel com MySQL cursor(dictionary=True)."""
 
     def __init__(self, path):
         self._path = path
@@ -171,7 +136,7 @@ def init_db(app=None):
     """
     global _mysql_pool, _pg_pool, _using_postgres, _using_sqlite, _sqlite_path
 
-    database_url = normalize_database_url((os.getenv("DATABASE_URL") or "").strip())
+    database_url = (os.getenv("DATABASE_URL") or "").strip()
     if os.getenv("PYTEST_CURRENT_TEST") and "postgres" in database_url:
         raise RuntimeError("Tests cannot use the production database")
 
@@ -383,8 +348,6 @@ def _db_context_manager():
             proxy.close()
         except Exception:
             pass
-
-# Export the db context manager for import by other modules.
-# Usage: from app.extensions.db import db
+        
 db = _db_context_manager
 

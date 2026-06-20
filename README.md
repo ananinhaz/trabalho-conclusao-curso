@@ -22,89 +22,50 @@ Facilitar o processo de adoção de animais, conectando adotantes e doadores por
 
 - **Sistema de Recomendação por IA:** Implementação customizada do algoritmo **K-Nearest Neighbors Ponderado (KNN)**, que calcula a afinidade por **Distância Euclidiana**.
 - **Perfil do Adotante:** Formulário para coletar dados de estilo de vida (moradia, rotina, etc.) que alimentam o motor de IA.
-- **Autenticação Segura:** Cadastro e login de usuários com suporte a **Google OAuth 2.0** e **JWT**.
-- **Gerenciamento de Anúncios:** CRUD completo para anúncios de animais por doadores.
+- **Autenticação Segura:** Cadastro e login de usuários com suporte a **Google OAuth 2.0**.
+- **Gerenciamento de Anúncios:** CRUD (Cadastro, Leitura, Atualização e Exclusão) completo para anúncios de animais por doadores.
 - **Interface:** Aplicação Single Page Application (SPA) com cards e selo visual de "Recomendado".
 - **Filtros de Busca:** Opções de filtragem por espécie, idade, porte e localização.
 
 ## 🐾 Visão Geral
 
-Adopt.me é um sistema web completo, com frontend em **React/Material UI**, backend em **API REST Flask** e banco de dados **PostgreSQL 16**. A aplicação é **containerizada com Docker** e hospedada em **AWS EC2**, com **Nginx** como reverse proxy e **HTTPS** via **Let's Encrypt**.
+Adopt.me é um sistema web completo, com o frontend desenvolvido em **React/Material UI** e o backend em **API REST Flask** e **MySQL**. O foco principal desta entrega é a operação total da aplicação, validando o motor de recomendação como o principal diferencial técnico do TCC.
 
 ---
 
-## 🧱 Stack e Arquitetura
+## 🧱 Arquitetura Técnica
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | React, Vite, Material UI |
-| Backend | Flask (Python), Gunicorn |
-| Banco de dados | PostgreSQL 16 (container Docker) |
-| Orquestração | Docker Compose |
-| Hospedagem | AWS EC2 (Ubuntu) |
-| Proxy / HTTPS | Nginx + Let's Encrypt |
-| CI/CD | GitHub Actions |
-| Autenticação | JWT + Google OAuth 2.0 |
+O sistema segue uma arquitetura modularizada em três camadas, garantindo escalabilidade e separação de responsabilidades.
 
-### Containers em produção
+- **Backend (Flask, Python)**
+  - **Motor de IA:** Lógica de negócio do KNN Ponderado implementada diretamente em Python, gerenciando a vetorização de dados e o cálculo de similaridade.
+  - **API REST:** Estrutura organizada com **Blueprints** (`auth.py` e `api.py`) para gerenciar as rotas de autenticação, perfis e CRUD de animais.
+  - **Segurança:** Uso de **Pydantic** para validação de dados e `prepared statements` no acesso ao MySQL para mitigar Injeção SQL.
+  - **Conexão:** Utiliza **Pool de Conexões** MySQL (`mysql.connector.pooling`) para otimizar o desempenho.
 
-| Container | Função |
-|-----------|--------|
-| `tcc_nginx` | Reverse proxy (portas 80/443) |
-| `tcc_frontend` | Build React servido por `serve` |
-| `tcc_backend` | API Flask via Gunicorn |
-| `tcc_db` | PostgreSQL 16 (volume `postgres_data`) |
+- **Banco de Dados (MySQL 8.x)**
+  - Schema `adoptme` com as tabelas cruciais `usuarios`, `animais` e `perfil_adotante`.
 
-Conexão interna do backend ao banco:
-
-```
-postgresql://postgres:postgres@db:5432/adoptme
-```
-
-### Backend (Flask, Python)
-
-- **Motor de IA:** KNN Ponderado em Python com Scikit-Learn (distância euclidiana ponderada).
-- **API REST:** Blueprints para autenticação (`/api/auth`) e recursos (`/api`).
-- **Segurança:** Prepared statements via psycopg2 e autenticação JWT no header `Authorization`.
-
-### Banco de Dados (PostgreSQL 16)
-
-- Schema `adoptme` com tabelas `usuarios`, `animais` e `perfil_adotante`.
-- Dados persistidos no volume Docker `postgres_data`.
-- Inicialização via `backend/init_postgres.sql`.
-
-### Frontend (React / Material UI)
-
-- SPA que consome a API REST.
-- Principais páginas: `Animals.jsx`, `Donate.jsx`, `AdopterForm.jsx`, `Landing.jsx`.
+- **Frontend (React / Material UI)**
+  - Aplicação Single Page Application (SPA) que consome a API REST.
+  - Principais componentes incluem a página de listagem (`Animals.jsx`), o formulário de doação (`Donate.jsx`) e o formulário de perfil do adotante (`AdopterForm.jsx`).
 
 ---
 
 ## Desenvolvimento local
 
 ### Pré-requisitos
+- Python 3.10+
+- Node.js 18+
+- (Opcional) MySQL, se não usar SQLite
 
-- Docker e Docker Compose **ou**
-- Python 3.11+ e Node.js 18+ (desenvolvimento sem Docker)
-
-### Opção 1 — Docker Compose (recomendado, igual à produção)
-
-Na raiz do projeto:
-
+### 1. Configurar variáveis de ambiente
 ```bash
-docker compose up -d --build
+cp .env.example .env
+# Edite .env: para dev local com SQLite use DATABASE_URL=sqlite:///./backend/dev.db
 ```
 
-- Frontend: http://localhost:5173 (ou via Nginx, conforme `docker-compose.yml`)
-- Backend: http://localhost:5000
-- PostgreSQL: container `tcc_db` (rede interna Docker)
-
-Configure um arquivo `.env` na raiz com variáveis como `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_REDIRECT_URI` quando necessário.
-
-### Opção 2 — Backend e frontend separados
-
-**Backend:**
-
+### 2. Rodar o backend
 ```bash
 cd backend
 python -m venv venv
@@ -113,13 +74,15 @@ venv\Scripts\Activate.ps1
 # Linux/macOS:
 # source venv/bin/activate
 pip install -r requirements.txt
-# Defina DATABASE_URL apontando para um PostgreSQL acessível
+# Com .env com DATABASE_URL=sqlite:///./dev.db (caminho relativo a backend/)
+# Criar tabelas SQLite (uma vez):
+python init_sqlite_schema.py
 flask run
+# ou: python -m flask run
 # Backend em http://127.0.0.1:5000
 ```
 
-**Frontend:**
-
+### 3. Rodar o frontend
 ```bash
 cd frontend
 npm install
@@ -127,43 +90,22 @@ npm run dev
 # Frontend em http://127.0.0.1:5173
 ```
 
----
+### 4. Testes e cobertura
 
-## Deploy em produção (AWS EC2)
-
-A aplicação roda em instância **EC2 Ubuntu** com **Docker Compose**:
-
-1. Clonar o repositório em `~/trabalho-conclusao-curso`
-2. Configurar `.env` na EC2 (credenciais Google OAuth — **não versionar**)
-3. Certificados HTTPS em `certbot/` (Let's Encrypt)
-4. `docker compose up -d --build`
-
-O domínio **adoptme.com.br** é servido via **Nginx** (`tcc_nginx`), que encaminha:
-
-- `/` → frontend
-- `/api` → backend
-
-Deploy automatizado via **GitHub Actions** (workflow `deploy.yml`), disparado após o CI na branch `main`.
-
----
-
-## Testes e cobertura
-
-**Backend:**
-
+**Backend (SQLite nos testes):**
 ```bash
 cd backend
+# Certifique-se de que .env tem DATABASE_URL=sqlite:///... ou deixe o conftest definir
 . venv\Scripts\Activate.ps1   # ou source venv/bin/activate
 pytest --cov=app --cov-report=xml --cov-report=term
 # coverage.xml em backend/coverage.xml
 ```
 
 **Frontend:**
-
 ```bash
 cd frontend
 npm run test:coverage
 # lcov.info em frontend/coverage/lcov.info
 ```
 
-**SonarCloud:** Os relatórios `backend/coverage.xml` e `frontend/coverage/lcov.info` são usados pelo workflow de CI.
+**Sonar:** Os relatórios `backend/coverage.xml` e `frontend/coverage/lcov.info` são usados pelo SonarCloud no CI.

@@ -1,3 +1,5 @@
+# Produção (EC2): backend e frontend usam imagens do GHCR — sem build local.
+# Desenvolvimento local: use docker-compose.yml na raiz do projeto.
 services:
   db:
     image: postgres:16
@@ -17,11 +19,11 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    image: ghcr.io/ananinhaz/adoptme-backend:latest
     container_name: tcc_backend
     restart: always
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/adoptme
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/adoptme}
       SECRET_KEY: secret123
       FLASK_SECRET_KEY: secret123
       JWT_SECRET_KEY: jwt123
@@ -35,10 +37,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: https://adoptme.com.br/api
+    image: ghcr.io/ananinhaz/adoptme-frontend:latest
     container_name: tcc_frontend
     restart: always
     depends_on:

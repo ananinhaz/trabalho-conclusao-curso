@@ -1,14 +1,15 @@
-FROM node:20-alpine
+FROM node:20
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci --prefer-offline --no-audit --no-fund
+RUN npm install
 
 COPY . .
 
-ARG VITE_API_URL=http://18.226.20.196:5000/api
+ARG VITE_API_URL
+
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
