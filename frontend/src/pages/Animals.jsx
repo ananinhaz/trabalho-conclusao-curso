@@ -602,7 +602,7 @@ export default function Animals({ user: userProp }) {
                                     minWidth: 120,
                                   }}
                                 >
-                                  {isAdopted ? 'Disponível' : 'Adotar'}
+                                  {isAdopted ? 'Disponível' : 'Adotado 🎉'}
                                 </Button>
                               </Tooltip>
 

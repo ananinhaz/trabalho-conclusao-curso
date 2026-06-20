@@ -354,25 +354,42 @@ db = _db_context_manager
 
 _LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "db", "::1"})
 
+POSTGRES_SCHEME = "postgres://"
+POSTGRESQL_SCHEME = "postgresql://"
+POSTGRESQL_PSYCOPG2_SCHEME = "postgresql+psycopg2://"
+
 
 def normalize_database_url(url: str, *, for_sqlalchemy: bool = False) -> str:
     """Normaliza DSN Postgres: driver e sslmode (disable local, require remoto)."""
+
     if not url or url.lower().startswith("sqlite:"):
         return url
-    if url.startswith("postgres://"):
-        repl = "postgresql+psycopg2://" if for_sqlalchemy else "postgresql://"
-        url = url.replace("postgres://", repl, 1)
-    elif for_sqlalchemy and url.startswith("postgresql://"):
+
+    if url.startswith(POSTGRES_SCHEME):
+        repl = POSTGRESQL_PSYCOPG2_SCHEME if for_sqlalchemy else POSTGRESQL_SCHEME
+        url = url.replace(POSTGRES_SCHEME, repl, 1)
+
+    elif for_sqlalchemy and url.startswith(POSTGRESQL_SCHEME):
         scheme = url.split(":", 1)[0]
+
         if "+psycopg2" not in scheme:
-            url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            url = url.replace(
+                POSTGRESQL_SCHEME,
+                POSTGRESQL_PSYCOPG2_SCHEME,
+                1
+            )
+
     parsed = urllib.parse.urlsplit(url)
     host = (parsed.hostname or "").lower()
     qs = parsed.query
+
     if "sslmode=" not in qs:
         sslmode = "disable" if host in _LOCAL_DB_HOSTS else "require"
+
         qs = (qs + f"&sslmode={sslmode}") if qs else f"sslmode={sslmode}"
+
         url = urllib.parse.urlunsplit(
             (parsed.scheme, parsed.netloc, parsed.path, qs, parsed.fragment)
         )
+
     return url
