@@ -1,4 +1,3 @@
-# backend/app/__init__.py
 import os
 from flask import Flask, request
 from flask_cors import CORS
@@ -10,12 +9,6 @@ def create_app():
     load_dotenv()
     app = Flask(__name__, instance_relative_config=False)
 
-    #
-    # IMPORTANT: set secret_key early so that `session` is available
-    # (Authlib / Flask-OAuth requires session to store state).
-    #
-    # Provide FLASK_SECRET_KEY in Render (or SECRET_KEY). Fallback is a dev string.
-    #
     app.secret_key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev_secret_change_me"
     # Log presence only (do not log the secret value)
     app.logger.info("create_app: secret_key set? %s", bool(app.secret_key))
@@ -28,11 +21,6 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "DEV_JWT_SECRET_CHANGE_ME")
     jwt = JWTManager(app)
 
-    # Security (CSRF): API REST autentica via JWT no header Authorization, sem cookies
-    # de sessão nas rotas /api/*. CSRF protege autenticação baseada em cookie; não se
-    # aplica a Bearer tokens (OWASP REST / ASVS). OAuth Google usa parâmetro state do
-    # Authlib contra CSRF no callback. supports_credentials=False impede envio cross-origin
-    # de cookies nas rotas /api/*.
     allowed_origins = [
         "http://127.0.0.1:8080",
         "http://localhost:8080",
@@ -48,14 +36,11 @@ def create_app():
      expose_headers=["Content-Type", "Authorization"],
 )
 
-    # preflight quick response
     @app.before_request
     def _preflight():
         if request.method == "OPTIONS":
             return app.make_response(("", 200))
 
-    # init oauth/db extensions if present (graceful)
-    # NOTE: init_oauth must run after app.secret_key is set (so session works)
     try:
         from .extensions.oauth import init_oauth
         init_oauth(app)
@@ -70,7 +55,7 @@ def create_app():
     except Exception as e:
         app.logger.exception("DB init failed (will still start): %s", e)
 
-    # Register blueprints (import after app created to avoid cycles)
+    # Registra blueprints 
     try:
         from .controllers.auth_controller import bp as auth_bp
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -94,7 +79,6 @@ def create_app():
     def health():
         return "ok", 200
 
-    # quick debug info in logs
     app.logger.info(
         "create_app: startup complete; FRONT_HOME=%s; GOOGLE_CLIENT_ID present=%s",
         FRONT_HOME,

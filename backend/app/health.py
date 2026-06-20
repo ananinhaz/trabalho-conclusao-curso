@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from .extensions.db import get_conn # <- ESTA IMPORTAÇÃO É CRÍTICA PARA O PATCH
+from .extensions.db import get_conn 
 
 health_bp = Blueprint("health", __name__)
 

@@ -22,7 +22,6 @@ import {
 } from '@mui/material'
 
 import LocationOnIcon from '@mui/icons-material/LocationOn'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import PetsIcon from '@mui/icons-material/Pets'
 import CakeIcon from '@mui/icons-material/Cake'
 import BoltIcon from '@mui/icons-material/Bolt'
@@ -35,6 +34,40 @@ import FilterListOffIcon from '@mui/icons-material/FilterListOff'
 import { colors, gradientPrimary, shadows, radii, cardSx, btnGradient, btnEdit, btnDelete, btnOutline, inputSx } from '../theme'
 
 const localeSort = (a, b) => a.localeCompare(b, 'pt', { sensitivity: 'base' })
+
+function getCompatibilityBadge(score) {
+  if (score == null) return null
+
+  if (score >= 85) {
+    return {
+      label: '⭐ Excelente compatibilidade',
+      bgcolor: colors.goldBg,
+      color: colors.goldText,
+    }
+  }
+
+  if (score >= 70) {
+    return {
+      label: '✅ Boa compatibilidade',
+      bgcolor: '#EEF2FF',
+      color: colors.primary,
+    }
+  }
+
+  if (score >= 50) {
+    return {
+      label: '🐾 Compatibilidade intermediária',
+      bgcolor: '#FFF8E1',
+      color: '#B45309',
+    }
+  }
+
+  return {
+    label: '🔎 Requer mais atenção',
+    bgcolor: '#F3F4F6',
+    color: colors.textMuted,
+  }
+}
 
 export default function Animals({ user: userProp }) {
   const navigate = useNavigate()
@@ -124,7 +157,10 @@ export default function Animals({ user: userProp }) {
 
     // pega os recomendados que existem em todos na ordem de recommendedItems
     const recsInAll = (recommendedItems || [])
-      .map((r) => byId.get(Number(r.id)))
+      .map((r) => {
+        const base = byId.get(Number(r.id))
+        return base ? { ...base, compatibility_score: r.compatibility_score } : null
+      })
       .filter(Boolean)
 
     const others = data.filter((d) => !recIdSet.has(Number(d.id)))
@@ -429,26 +465,31 @@ export default function Animals({ user: userProp }) {
             )}
 
             {filteredData.map((animal) => {
-              const isRecommended = recIdSet.has(Number(animal.id))
               const isMine = Number(animal.doador_id || 0) === Number(user?.id || 0)
               const isAdopted = Boolean(animal.adotado_em)
 
-              const recIndex = recommendedItems.findIndex((item) => Number(item.id) === Number(animal.id))
-              const isStronglyRecommended = isRecommended && recIndex === 0 && recommendedItems.length > 0
-              const seloLabel = isStronglyRecommended ? 'Fortemente recomendado' : 'Recomendado para você'
+              const compatScore = animal.compatibility_score
+              const compatBadge = getCompatibilityBadge(compatScore)
+              const showCompatBadge = compatBadge
 
               return (
                 <Grid item xs={12} sm={6} md={4} key={animal.id} sx={{ display: 'flex' }}>
                   <Paper sx={{ ...cardStyles, flex: 1, maxWidth: 480, margin: '0 auto' }}>
-                    {isRecommended && (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1.5, pb: 0.5 }}>
+                    {showCompatBadge && (
+                      <Box sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        pt: 1.5,
+                        pb: 0.5,
+                        gap: 0.25,
+                      }}>
                         <Box
                           sx={{
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: 0.5,
-                            bgcolor: isStronglyRecommended ? colors.goldBg : '#EEF2FF',
-                            color: isStronglyRecommended ? colors.goldText : colors.primary,
+                            bgcolor: compatBadge.bgcolor,
+                            color: compatBadge.color,
                             px: 1.5,
                             py: 0.5,
                             borderRadius: '8px',
@@ -456,13 +497,22 @@ export default function Animals({ user: userProp }) {
                             fontWeight: 700,
                           }}
                         >
-                          <CheckCircleOutlineIcon sx={{ fontSize: '1rem' }} />
-                          {seloLabel}
+                          {compatBadge.label}
                         </Box>
+
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            fontWeight: 700,
+                            color: compatBadge.color,
+                          }}
+                        >
+                          {compatScore}% compatível
+                        </Typography>
                       </Box>
                     )}
 
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pt: isRecommended ? 0.5 : 1.5, position: 'relative' }}>
+                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', pt: showCompatBadge ? 0.5 : 1.5, position: 'relative' }}>
                       <Box
                         sx={{
                           width: 160,

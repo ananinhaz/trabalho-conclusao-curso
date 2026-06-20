@@ -27,12 +27,12 @@ except Exception:
 
 bp_api = Blueprint("api", __name__)
 
-# --- IA — PESOS 
+# PESOS 
 VEC_WEIGHTS = np.array([
-    1.0,  # moradia / porte/especie
-    1.0,  # bom_com_criancas
-    5.0,  # tempo disponível (peso maior)
-    1.0   # estilo de vida
+    2.0,   # moradia
+    1.5,   # crianças
+    3.0,   # tempo
+    2.0    # estilo
 ])
 
 # --- utilitários db / ambiente 
@@ -167,7 +167,7 @@ def _normalize_to_int_bool(v):
 def _row_to_animal(row: dict) -> dict:
     bom = row.get("bom_com_criancas")
     bom_val = _normalize_to_int_bool(bom)
-    return {
+    out = {
         "id": row.get("id"),
         "nome": row.get("nome"),
         "especie": row.get("especie"),
@@ -185,6 +185,9 @@ def _row_to_animal(row: dict) -> dict:
         "bom_com_criancas": bom_val,
         "adotado_em": row.get("adotado_em"),
     }
+    if row.get("compatibility_score") is not None:
+        out["compatibility_score"] = row["compatibility_score"]
+    return out
 
 def _json_error(msg: str, code: int = 400):
     return jsonify({"ok": False, "error": msg}), code
@@ -192,7 +195,7 @@ def _json_error(msg: str, code: int = 400):
 def _rows_to_payload(rows, ids):
     return {"items": [_row_to_animal(r) for r in rows], "ids": ids or []}
 
-# --- IA: vetorização 
+# vetorização 
 def _build_user_vector(perfil: dict) -> list[float]:
     tipo_moradia = (perfil.get("tipo_moradia") or "").strip().lower()
     tem_criancas = to_bool_like(perfil.get("tem_criancas"))
@@ -596,42 +599,17 @@ def recomendacoes():
                 rows = cur.fetchall() or []
         return jsonify(_rows_to_payload(rows[:n], []))
 
-    # se tem perfil, pega todos os animais e aplica IA (KNN ponderado)
     with db_ext.db() as conn:
         with conn.cursor(dictionary=True) as cur:
             cur.execute(SQL_SELECT_ANIMAL_ROW)
             animals = cur.fetchall() or []
-
-    # aplica filtros rígidos(fixos
-    tm = (perfil.get("tipo_moradia") or "").lower()
-    try:
-        tempo = int(perfil.get("tempo_disponivel_horas_semana") or 0)
-    except Exception:
-        tempo = 0
-
-    def _hard_ok(a):
-        especie = str(a.get("especie") or "").lower()
-        porte = str(a.get("porte") or "").lower()
-        if "aparta" in tm and tempo <= 6:
-            if "gato" in especie:
-                return True
-            if "cachorro" in especie and porte in ("pequeno", "pequena", "mini"):
-                return True
-            return False
-        if tempo <= 4 and "cachorro" in especie and porte in ("medio", "grande"):
-            return False
-        return True
-
-    filtered = [a for a in animals if _hard_ok(a)]
-    if not filtered:
-        filtered = animals
 
     # vetores e ranking
     user_vec = _build_user_vector(perfil)
     user_vec_np = np.array([user_vec])
     animal_vectors = []
     animal_map = []
-    for r in filtered:
+    for r in animals:
         animal_vec = _build_animal_vector(r)
         if len(animal_vec) == len(VEC_WEIGHTS):
             animal_vectors.append(animal_vec)
@@ -672,7 +650,15 @@ def recomendacoes():
             "detail": str(exc)
         }), 500
 
-    scored = [(float(dist), animal_data) for dist, animal_data in zip(distances, animal_map)]
+    max_distance = float(np.sqrt(np.sum(VEC_WEIGHTS)))
+    scored = []
+    for dist, animal_data in zip(distances, animal_map):
+        compatibility = max(
+            0,
+            100 * (1 - float(dist) / max_distance)
+        )
+        animal_data["compatibility_score"] = round(compatibility, 1)
+        scored.append((float(dist), animal_data))
     scored.sort(key=lambda x: x[0])
     top = [a for _, a in scored[:n]]
     ids = [a["id"] for a in top]

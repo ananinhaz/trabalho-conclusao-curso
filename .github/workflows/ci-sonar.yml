@@ -24,13 +24,12 @@ jobs:
           --health-retries=30
 
     env:
-      # envs para o job (seu app usa DB_* no .env)
+      # envs para o job
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_USER: root
       DB_PASSWORD: rootpassword
       DB_NAME: adoptme
-      # Sonar - certifique-se de definir estes secrets no repo
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       SONAR_ORG: ${{ secrets.SONAR_ORG }}
       SONAR_PROJECTKEY: ${{ secrets.SONAR_PROJECTKEY }}
@@ -146,7 +145,7 @@ jobs:
           pytest --cov=app --cov-report=xml --cov-report=term
 
       ####################
-      # Frontend: optional (se quiser enviar coverage JS)
+      # Frontend: optional
       ####################
       - name: Set up Node
         uses: actions/setup-node@v4
