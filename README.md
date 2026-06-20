@@ -29,7 +29,7 @@ Facilitar o processo de adoção de animais, conectando adotantes e doadores por
 
 ## 🐾 Visão Geral
 
-Adopt.me é um sistema web completo, com o frontend desenvolvido em **React/Material UI** e o backend em **API REST Flask** e **MySQL**. O foco principal desta entrega é a operação total da aplicação, validando o motor de recomendação como o principal diferencial técnico do TCC.
+Adopt.me é um sistema web completo, com o frontend desenvolvido em **React/Material UI** e o backend em **API REST Flask** e **PostgreSQL**. O foco principal desta entrega é a operação total da aplicação, validando o motor de recomendação como o principal diferencial técnico do TCC.
 
 ---
 
