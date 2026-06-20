@@ -38,6 +38,8 @@ const localeSort = (a, b) => a.localeCompare(b, 'pt', { sensitivity: 'base' })
 function getCompatibilityBadge(score) {
   if (score == null) return null
 
+  if (score < 30) return null
+
   if (score >= 85) {
     return {
       label: '⭐ Excelente compatibilidade',
@@ -68,6 +70,7 @@ function getCompatibilityBadge(score) {
     color: colors.textMuted,
   }
 }
+
 
 export default function Animals({ user: userProp }) {
   const navigate = useNavigate()
